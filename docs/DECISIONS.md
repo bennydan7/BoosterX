@@ -1,0 +1,37 @@
+# BoostX Architecture & Design Decisions
+
+This document logs all key architectural, security, and design decisions made during the development of BoostX to resolve specification ambiguities safely and maintain system integrity.
+
+---
+
+## Decisions Log
+
+### DEC-001: Flask + SQLAlchemy + Redis + RQ Architecture
+- **Context**: The backend required a resilient background worker system for service sync, payment verification retries, and order status polling.
+- **Decision**: Implemented Flask 3, SQLAlchemy 2 (with Postgres transaction locks), Redis, and RQ for background workers/scheduler.
+- **Rationale**: Standardized stack matching project requirements, ensuring ACID compliance for ledger transactions.
+
+### DEC-002: Browser Session-Based Guest Claiming
+- **Context**: Spec §16 and prompt audit identified a flaw in contact-based claiming where unverified email/phone could allow account takeover of guest funds.
+- **Decision**: Guest funds and orders migrate to a newly registered or logged-in account based strictly on the possession of the signed HttpOnly guest session cookie (`CLAIM_BY_CONTACT_ENABLED=false` by default).
+- **Rationale**: Unverified phone/email must never unlock money. Cookie possession proves the current user actually placed the guest orders.
+
+### DEC-003: Provider Call Retry Hardening
+- **Context**: Starter `ProviderAdapter` retried all requests including `add`. Transient network timeouts during `add`, `cancel`, or `refill` could result in duplicate orders or double actions at the SMM provider.
+- **Decision**: `add`, `cancel`, and `refill` calls are NEVER retried automatically. Only idempotent read operations (`services`, `status`, `balance`) retry on network timeouts.
+- **Rationale**: Prevents duplicate provider orders and balance loss on transient timeouts. Ambiguous errors set `needs_attention=True` on orders for manual admin inspection.
+
+### DEC-004: Phone Number Normalization to E.164 Standard
+- **Context**: Ghanaian phone numbers can be entered as `0244123456`, `+233244123456`, or `233244123456`.
+- **Decision**: All phone numbers are normalized to E.164 standard (`+233XXXXXXXXX`) across user registration, login, payment processing, and guest checkout.
+- **Rationale**: Guarantees consistent lookup and matching across databases and SMS/mobile money gateways.
+
+### DEC-005: Ledger-Calculated Balances with Row-Level Locking
+- **Context**: Balance drift and race conditions during simultaneous order placement.
+- **Decision**: User balance is calculated dynamically from ledger entries (`posted_credits - posted_debits - reserved_debits`) within a Postgres transaction that acquires a `SELECT FOR UPDATE` lock on the owner record.
+- **Rationale**: Eliminates race conditions and prevents negative balances under concurrent access.
+
+### DEC-006: Server-Side Single-Source Pricing
+- **Context**: Clients might attempt to send price estimates in order creation requests.
+- **Decision**: All order quotes and transactions calculate service price on the server: `customer_price_ghs = ceil_or_halfup((provider_cost_usd / 1000 * qty * usd_to_ghs_rate) + flat_markup_ghs)`. Client-supplied prices are completely ignored.
+- **Rationale**: Protects against tampering and price drift.
