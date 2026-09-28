@@ -28,10 +28,12 @@ def create_app(config_class=Config):
     from backend.app.api.catalog import catalog_bp
     from backend.app.payments.routes import payments_bp
     from backend.app.api.orders import orders_bp
+    from backend.app.admin.routes import admin_bp
     app.register_blueprint(auth_bp)
     app.register_blueprint(catalog_bp)
     app.register_blueprint(payments_bp)
     app.register_blueprint(orders_bp)
+    app.register_blueprint(admin_bp)
 
     # Serve built React SPA & hash routing fallback
     @app.route("/", defaults={"path": ""})
