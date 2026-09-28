@@ -54,6 +54,7 @@ class User:
     phone: Optional[str]
     password_hash: str
     role: UserRole
+    full_name: Optional[str] = None
     status: UserStatus = UserStatus.ACTIVE
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     last_login_at: Optional[datetime] = None

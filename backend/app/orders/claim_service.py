@@ -1,69 +1,73 @@
-"""
-claim_service.py
-
-Guest checkout still works (spec §16). This service is what lets someone
-who ordered as a guest — before they ever created an account — see those
-old orders once they register or log in, instead of starting from zero.
-
-How linking works:
-  - A guest order is always attached to a `guest_sessions` row, and that
-    row optionally carries a phone/email the guest typed in at checkout
-    (spec §16: "Optional: allow the customer to enter a phone number or
-    email for order recovery/notifications").
-  - When an account is created (or logged into) with a matching phone or
-    email, every order under any guest session that shares that contact
-    detail is re-attached to the new `user_id`.
-  - This never happens silently in the background scanning all guests —
-    it only fires for the contact details the person themselves just
-    typed into the registration/login form, so it can't be used to pull
-    in someone else's orders.
-"""
-
-from __future__ import annotations
-
 from dataclasses import dataclass
-from typing import Optional, Protocol
-
+from typing import Optional
+import hashlib
+from backend.app.db import db
+from backend.app.models import Order, Payment, LedgerTransaction, GuestSession
+from backend.app.utils.phone import normalize_phone
 
 @dataclass(frozen=True)
 class ClaimResult:
     orders_claimed: int
+    payments_claimed: int
     public_order_ids: list[str]
 
-
-class ClaimRepository(Protocol):
-    def find_unclaimed_order_ids_by_contact(
-        self, *, email: Optional[str], phone: Optional[str]
-    ) -> list[tuple[int, str]]:
-        """Returns [(order_id, public_order_id), ...] for guest orders
-        (user_id IS NULL) whose guest_session matches this email/phone."""
-        ...
-
-    def attach_orders_to_user(self, order_ids: list[int], user_id: int) -> None: ...
-
-
 class ClaimService:
-    def __init__(self, repo: ClaimRepository):
-        self._repo = repo
-
-    def claim_guest_orders(
-        self, *, user_id: int, email: Optional[str], phone: Optional[str]
-    ) -> ClaimResult:
+    @staticmethod
+    def claim_current_guest_session(*, user_id: int, raw_guest_session_token: Optional[str], claim_by_contact_enabled: bool = False, email: Optional[str] = None, phone: Optional[str] = None) -> ClaimResult:
         """
-        Call this once, right after register_customer() succeeds, and
-        again on every login (cheap — it's a no-op once everything is
-        already claimed). Safe to call with both email and phone, or
-        either alone.
+        Moves guest orders, payments, and ledger entries associated with the
+        CURRENT guest session (verified by cookie possession) to user_id in ONE transaction.
+        If claim_by_contact_enabled is True, also claims unclaimed orders matching email/phone (orders ONLY, NEVER money).
         """
-        if not email and not phone:
-            return ClaimResult(orders_claimed=0, public_order_ids=[])
+        if not raw_guest_session_token and not (claim_by_contact_enabled and (email or phone)):
+            return ClaimResult(orders_claimed=0, payments_claimed=0, public_order_ids=[])
 
-        matches = self._repo.find_unclaimed_order_ids_by_contact(email=email, phone=phone)
-        if not matches:
-            return ClaimResult(orders_claimed=0, public_order_ids=[])
+        session_id_hash = hashlib.sha256(raw_guest_session_token.encode("utf-8")).hexdigest() if raw_guest_session_token else None
 
-        order_ids = [row[0] for row in matches]
-        public_ids = [row[1] for row in matches]
-        self._repo.attach_orders_to_user(order_ids, user_id)
+        claimed_orders = 0
+        claimed_payments = 0
+        public_ids = []
 
-        return ClaimResult(orders_claimed=len(order_ids), public_order_ids=public_ids)
+        with db.session.begin_nested():
+            # 1. Claim current guest session (Orders, Payments, Ledger rows)
+            if session_id_hash:
+                orders = Order.query.filter_by(session_id=session_id_hash, user_id=None).all()
+                for o in orders:
+                    o.user_id = user_id
+                    public_ids.append(o.public_order_id)
+                    claimed_orders += 1
+
+                payments = Payment.query.filter_by(session_id=session_id_hash, user_id=None).all()
+                for p in payments:
+                    p.user_id = user_id
+                    claimed_payments += 1
+
+                ledgers = LedgerTransaction.query.filter_by(session_id=session_id_hash, user_id=None).all()
+                for l in ledgers:
+                    l.user_id = user_id
+
+            # 2. Contact-based claiming (OFF by default). Moves orders ONLY, NEVER payments/ledger.
+            if claim_by_contact_enabled and (email or phone):
+                norm_phone = normalize_phone(phone) if phone else None
+                clean_email = email.strip().lower() if email else None
+
+                matched_guest_hashes = set()
+                if clean_email:
+                    guests = GuestSession.query.filter_by(email=clean_email).all()
+                    for g in guests:
+                        matched_guest_hashes.add(g.session_id_hash)
+                if norm_phone:
+                    guests = GuestSession.query.filter_by(phone=norm_phone).all()
+                    for g in guests:
+                        matched_guest_hashes.add(g.session_id_hash)
+
+                if matched_guest_hashes:
+                    contact_orders = Order.query.filter(Order.session_id.in_(matched_guest_hashes), Order.user_id == None).all()
+                    for o in contact_orders:
+                        o.user_id = user_id
+                        if o.public_order_id not in public_ids:
+                            public_ids.append(o.public_order_id)
+                            claimed_orders += 1
+
+        db.session.commit()
+        return ClaimResult(orders_claimed=claimed_orders, payments_claimed=claimed_payments, public_order_ids=public_ids)

@@ -32,7 +32,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Protocol
 
-from .models import User, UserRole, UserStatus, validate_identifier, validate_password_policy
+from backend.app.models import User, UserRole, UserStatus
+from .models import validate_identifier, validate_password_policy
 
 LOCKOUT_THRESHOLD = 5          # failed attempts before a temporary lock
 LOCKOUT_DURATION = timedelta(minutes=15)
@@ -97,7 +98,7 @@ class AuthService:
     # Registration — customers only, always
     # ------------------------------------------------------------------ #
     def register_customer(
-        self, *, email: Optional[str], phone: Optional[str], password: str
+        self, *, email: Optional[str], phone: Optional[str], password: str, full_name: Optional[str] = None
     ) -> User:
         id_error = validate_identifier(email, phone)
         if id_error:
@@ -114,8 +115,8 @@ class AuthService:
             raise AuthError("An account with those details already exists.")
 
         user = User(
-            id=0,
             public_user_id=User.new_public_id(UserRole.CUSTOMER),
+            full_name=full_name,
             email=email.strip().lower() if email else None,
             phone=phone.strip() if phone else None,
             password_hash="",
@@ -143,7 +144,6 @@ class AuthService:
             raise AuthError("An account with those details already exists.")
 
         user = User(
-            id=0,
             public_user_id=User.new_public_id(UserRole.ADMIN),
             email=email.strip().lower(),
             phone=None,
@@ -166,7 +166,8 @@ class AuthService:
         if user is None:
             # Do real work anyway so response timing doesn't leak whether
             # the account exists (a cheap but worthwhile mitigation).
-            User(0, "", None, None, "", UserRole.CUSTOMER).check_password(password)
+            from werkzeug.security import check_password_hash
+            check_password_hash("pbkdf2:sha256:1000$dummy$dummy", password)
             raise AuthError(GENERIC_LOGIN_ERROR)
 
         if user.is_locked(now=now):

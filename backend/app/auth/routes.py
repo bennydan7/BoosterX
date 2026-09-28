@@ -1,59 +1,92 @@
-"""
-routes.py — Flask blueprint for BoostX authentication.
+from flask import Blueprint, jsonify, request, session, current_app, make_response
+from backend.app.db import db
+from backend.app.models import User, UserRole, UserStatus
+from backend.app.auth.repository import SQLAlchemyUserRepository
+from backend.app.auth.auth_service import AuthService, AuthError
+from backend.app.auth.session import get_current_user, get_or_create_guest_session, generate_token
+from backend.app.middleware import get_csrf_token
+from backend.app.orders.claim_service import ClaimService
+from backend.app.utils.phone import normalize_phone
 
-Frontend contract (read this before wiring up the login page):
-  - ONE template, ONE form: identifier (email or phone) + password.
-  - No "Admin login" link, tab, checkbox, or query-param switch anywhere.
-  - After POST /api/auth/login succeeds, redirect the browser to
-    `redirect_path` from the JSON response. Do not branch on role in the
-    frontend — the backend already decided where to send them.
-  - The register page/form only ever calls POST /api/auth/register, which
-    can only ever create a customer account (see auth_service.py).
-"""
+auth_bp = Blueprint("auth", __name__, url_prefix="/api")
 
-from __future__ import annotations
-
-from flask import Blueprint, jsonify, request, session
-
-from .auth_service import AuthError, AuthService, UserRepository
-
-auth_bp = Blueprint("auth", __name__, url_prefix="/api/auth")
-
-# In app factory: auth_bp.auth_service = AuthService(real_repo); app.register_blueprint(auth_bp)
-_auth_service: AuthService | None = None
+repo = SQLAlchemyUserRepository()
+auth_service = AuthService(repo)
 
 
-def init_auth_routes(auth_service: AuthService) -> Blueprint:
-    global _auth_service
-    _auth_service = auth_service
-    return auth_bp
+@auth_bp.post("/session")
+def guest_session_endpoint():
+    """Create or return guest session cookie & CSRF token."""
+    raw_token, session_hash = get_or_create_guest_session()
+    csrf_tok = get_csrf_token()
+    
+    resp = make_response(jsonify({
+        "status": "ok",
+        "csrf_token": csrf_tok,
+        "is_guest": True
+    }))
+    
+    cookie_name = current_app.config["GUEST_COOKIE_NAME"]
+    resp.set_cookie(
+        cookie_name,
+        raw_token,
+        httponly=True,
+        secure=request.is_secure,
+        samesite="Lax",
+        max_age=30 * 24 * 3600
+    )
+    return resp, 200
 
 
-@auth_bp.post("/register")
+@auth_bp.post("/auth/register")
 def register():
     data = request.get_json(silent=True) or {}
+    full_name = data.get("full_name")
+    identifier = data.get("identifier") or data.get("email") or data.get("phone", "")
+    password = data.get("password", "")
+
+    email = None
+    phone = None
+    if "@" in identifier:
+        email = identifier.strip().lower()
+    else:
+        phone = normalize_phone(identifier)
+
     try:
-        user = _auth_service.register_customer(
-            email=data.get("email"),
-            phone=data.get("phone"),
-            password=data.get("password", ""),
+        user = auth_service.register_customer(
+            email=email,
+            phone=phone,
+            password=password,
+            full_name=full_name
         )
     except AuthError as exc:
         return jsonify({"error": str(exc)}), 400
 
+    # Auto-login after registration
+    result = auth_service.authenticate(identifier=identifier, password=password)
+    session["user_id"] = result.user.id
+    session["session_version"] = result.user.session_version
+    csrf_tok = get_csrf_token()
+
+    # Claim guest session
+    guest_cookie = request.cookies.get(current_app.config["GUEST_COOKIE_NAME"])
+    claim_res = ClaimService.claim_current_guest_session(
+        user_id=result.user.id,
+        raw_guest_session_token=guest_cookie,
+        claim_by_contact_enabled=current_app.config["CLAIM_BY_CONTACT_ENABLED"],
+        email=result.user.email,
+        phone=result.user.phone
+    )
+
     return jsonify({
-        "user_id": user.public_user_id,
-        "message": "Account created. Please sign in.",
+        "redirect_path": result.redirect_path,
+        "csrf_token": csrf_tok,
+        "orders_claimed": claim_res.orders_claimed
     }), 201
 
 
-@auth_bp.post("/login")
+@auth_bp.post("/auth/login")
 def login():
-    """
-    Single login endpoint for BOTH customers and admins. The request body
-    and the success/error shape are identical regardless of which type of
-    account is authenticating — that symmetry is the point.
-    """
     data = request.get_json(silent=True) or {}
     identifier = data.get("identifier", "")
     password = data.get("password", "")
@@ -62,49 +95,83 @@ def login():
         return jsonify({"error": "Email/phone and password are required."}), 400
 
     try:
-        result = _auth_service.authenticate(identifier=identifier, password=password)
+        result = auth_service.authenticate(identifier=identifier, password=password)
     except AuthError as exc:
-        # Same status code, same shape, whether the account is a customer,
-        # an admin, locked, disabled, or doesn't exist at all.
         return jsonify({"error": str(exc)}), 401
 
-    # Server-side session — the browser never sees or sets the role itself.
     session["user_id"] = result.user.id
-    session["session_token"] = result.session_token
+    session["session_version"] = result.user.session_version
+    csrf_tok = get_csrf_token()
+
+    # Claim guest session
+    guest_cookie = request.cookies.get(current_app.config["GUEST_COOKIE_NAME"])
+    claim_res = ClaimService.claim_current_guest_session(
+        user_id=result.user.id,
+        raw_guest_session_token=guest_cookie,
+        claim_by_contact_enabled=current_app.config["CLAIM_BY_CONTACT_ENABLED"],
+        email=result.user.email,
+        phone=result.user.phone
+    )
 
     return jsonify({
         "redirect_path": result.redirect_path,
-        # Deliberately no "role" field in the response body: the frontend
-        # doesn't branch on it, it just follows redirect_path.
+        "csrf_token": csrf_tok,
+        "orders_claimed": claim_res.orders_claimed
     }), 200
 
 
-@auth_bp.post("/logout")
+@auth_bp.post("/auth/logout")
 def logout():
     session.clear()
     return jsonify({"message": "Signed out."}), 200
 
 
-@auth_bp.get("/me")
+@auth_bp.get("/auth/me")
 def me():
-    """
-    Used by the frontend to know what to render post-login (e.g. show the
-    admin shell vs. the customer order-tracking shell) WITHOUT exposing
-    role on the public login page itself — this endpoint only answers
-    once a session already exists.
-    """
-    user_id = session.get("user_id")
-    if not user_id:
-        return jsonify({"error": "Not signed in."}), 401
-
-    user = _auth_service._repo.get_by_id(user_id)  # noqa: SLF001 — internal use
-    if user is None:
-        session.clear()
-        return jsonify({"error": "Not signed in."}), 401
+    user = get_current_user()
+    csrf_tok = get_csrf_token()
+    
+    if not user:
+        # Check if guest session exists
+        raw_guest_cookie = request.cookies.get(current_app.config["GUEST_COOKIE_NAME"])
+        return jsonify({
+            "authenticated": False,
+            "role": "guest",
+            "csrf_token": csrf_tok
+        }), 200
 
     return jsonify({
+        "authenticated": True,
         "user_id": user.public_user_id,
-        "role": user.role.value,
+        "full_name": user.full_name,
+        "role": user.role,
         "email": user.email,
         "phone": user.phone,
+        "csrf_token": csrf_tok
     }), 200
+
+
+@auth_bp.post("/auth/change-password")
+def change_password():
+    user = get_current_user()
+    if not user:
+        return jsonify({"error": "Authentication required."}), 401
+
+    data = request.get_json(silent=True) or {}
+    current_password = data.get("current_password", "")
+    new_password = data.get("new_password", "")
+
+    if not user.check_password(current_password):
+        return jsonify({"error": "Incorrect current password."}), 400
+
+    from backend.app.auth.models import validate_password_policy
+    err = validate_password_policy(new_password)
+    if err:
+        return jsonify({"error": err}), 400
+
+    user.set_password(new_password)
+    user.session_version += 1  # Invalidate all existing sessions
+    db.session.commit()
+
+    session["session_version"] = user.session_version
+    return jsonify({"message": "Password updated successfully."}), 200
