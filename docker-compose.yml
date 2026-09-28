@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    command: gunicorn --bind 0.0.0.0:5000 --workers 4 "backend.app:create_app()"
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-boostx-production-secret-key-32-chars-min}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/backend/boostx.db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - PROVIDER_MODE=${PROVIDER_MODE:-live}
+      - PROVIDER_API_URL=${PROVIDER_API_URL:-https://boostcenter2.com/api/v2}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - redis
+    volumes:
+      - uploads_data:/app/backend/uploads
+      - db_data:/app/backend
+
+  worker:
+    build: .
+    command: python -m backend.app.workers.scheduler
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-boostx-production-secret-key-32-chars-min}
+      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/backend/boostx.db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - PROVIDER_MODE=${PROVIDER_MODE:-live}
+      - PROVIDER_API_URL=${PROVIDER_API_URL:-https://boostcenter2.com/api/v2}
+      - PROVIDER_API_KEY=${PROVIDER_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    depends_on:
+      - redis
+    volumes:
+      - uploads_data:/app/backend/uploads
+      - db_data:/app/backend
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  uploads_data:
+  db_data:

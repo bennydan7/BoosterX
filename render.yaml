@@ -1,0 +1,53 @@
+services:
+  - type: web
+    name: boostx-web
+    env: python
+    buildCommand: "npm run build && pip install -r backend/requirements.txt"
+    startCommand: "gunicorn --bind 0.0.0.0:$PORT 'backend.app:create_app()'"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.1
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PROVIDER_MODE
+        value: live
+      - key: PROVIDER_API_URL
+        value: https://boostcenter2.com/api/v2
+      - key: PROVIDER_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: boostx-redis
+          property: connectionString
+
+  - type: worker
+    name: boostx-worker
+    env: python
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "python -m backend.app.workers.scheduler"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.1
+      - key: PROVIDER_MODE
+        value: live
+      - key: PROVIDER_API_URL
+        value: https://boostcenter2.com/api/v2
+      - key: PROVIDER_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: boostx-redis
+          property: connectionString
+
+  - type: redis
+    name: boostx-redis
+    ipAllowList: []
+    plan: free
