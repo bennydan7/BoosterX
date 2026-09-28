@@ -1,0 +1,207 @@
+from datetime import datetime, timezone
+from decimal import Decimal
+import json
+from flask import current_app
+from backend.app.db import db
+from backend.app.models import Payment, PaymentStatus, PaymentVerification, LedgerTransaction, LedgerStatus, LedgerType, Setting, User, GuestSession, Notification
+from backend.app.ai.payment_ai import PaymentAIExtraction
+from backend.app.utils.phone import normalize_phone
+from backend.app.services.ledger_service import get_owner_balance
+
+def process_payment_verification(payment: Payment, ai_result: PaymentAIExtraction, admin_override_action: str = None) -> str:
+    """
+    Evaluates AI extraction results against backend rules and payment expectations.
+    Runs verification and ledger crediting in ONE transaction with owner lock.
+    Returns decision: 'Verified', 'Rejected', 'Review Required', or 'Expired'.
+    """
+    now = datetime.now(timezone.utc)
+    payment_expires = payment.expires_at.replace(tzinfo=timezone.utc) if payment.expires_at.tzinfo is None else payment.expires_at
+
+    # 1. Check expiration
+    if now > payment_expires and payment.status not in (PaymentStatus.VERIFIED, PaymentStatus.REJECTED):
+        payment.status = PaymentStatus.EXPIRED
+        db.session.commit()
+        return PaymentStatus.EXPIRED
+
+    # Handle Admin Override (Approve / Reject)
+    if admin_override_action == "approve":
+        return _apply_verified_credit(payment, ai_result, admin_approved=True)
+    elif admin_override_action == "reject":
+        payment.status = PaymentStatus.REJECTED
+        payment.rejection_reason = payment.rejection_reason or "Admin rejected payment proof."
+        _log_verification(payment.id, ai_result, decision=PaymentStatus.REJECTED, failed_checks=["admin_rejected"])
+        db.session.commit()
+        return PaymentStatus.REJECTED
+
+    # Idempotency check: if already verified, return Verified without crediting again
+    if payment.status == PaymentStatus.VERIFIED:
+        return PaymentStatus.VERIFIED
+
+    passed_checks = []
+    failed_checks = []
+
+    # Check Recipient Number or Alias
+    payment_num_setting = Setting.query.filter_by(key="payment_number").first()
+    target_num = payment_num_setting.value if payment_num_setting else "0202979378"
+    norm_target_num = normalize_phone(target_num)
+
+    aliases_setting = Setting.query.filter_by(key="payment_recipient_aliases").first()
+    allowed_aliases = ["BOOSTX", "BOOST X", "BOOSTX GHANA", "0202979378"]
+    if aliases_setting:
+        try:
+            allowed_aliases = json.loads(aliases_setting.value)
+        except Exception:
+            pass
+
+    extracted_num = normalize_phone(ai_result.recipient_number) if ai_result.recipient_number else None
+    extracted_name = (ai_result.recipient_name or "").strip().upper()
+
+    num_match = (extracted_num == norm_target_num) if extracted_num else False
+    name_match = any(alias.upper() in extracted_name for alias in allowed_aliases) if extracted_name else False
+
+    if num_match or name_match:
+        passed_checks.append("recipient_matched")
+    else:
+        failed_checks.append("recipient_mismatch")
+
+    # Check Status
+    status_clean = (ai_result.status or "").lower()
+    if status_clean in ("successful", "success", "completed", "sent"):
+        passed_checks.append("status_successful")
+    else:
+        failed_checks.append("status_unsuccessful")
+
+    # Check Reference Uniqueness
+    ref = (ai_result.reference or "").strip()
+    if not ref:
+        failed_checks.append("missing_reference")
+    else:
+        existing_tx = LedgerTransaction.query.filter_by(reference=ref, type=LedgerType.PAYMENT_CREDIT).first()
+        if existing_tx:
+            failed_checks.append("duplicate_reference")
+            payment.rejection_reason = "Transaction already used."
+        else:
+            passed_checks.append("reference_unique")
+
+    # Check Amount
+    detected_amt = Decimal(str(ai_result.amount or 0.0))
+    expected_amt = Decimal(str(payment.amount_ghs))
+
+    partial_setting = Setting.query.filter_by(key="partial_credit_enabled").first()
+    partial_enabled = (partial_setting.value.lower() == "true") if partial_setting else False
+
+    if detected_amt == expected_amt:
+        passed_checks.append("amount_exact")
+    elif detected_amt < expected_amt:
+        failed_checks.append("amount_underpaid")
+        if not partial_enabled:
+            payment.rejection_reason = f"Payment amount GHS {detected_amt:.2f} is less than expected GHS {expected_amt:.2f}."
+    elif detected_amt > expected_amt:
+        failed_checks.append("amount_overpaid")
+
+    # Check AI Confidence & Integrity Flags
+    if ai_result.confidence < 0.85 or ("low_confidence" in ai_result.integrity_flags):
+        failed_checks.append("low_confidence")
+
+    # Decision Matrix Evaluation per Spec Section 10:
+    # 1. Definite Rejections: duplicate_reference, recipient_mismatch, status_unsuccessful, amount_underpaid (when partial disabled)
+    if "duplicate_reference" in failed_checks or "recipient_mismatch" in failed_checks or "status_unsuccessful" in failed_checks or ("amount_underpaid" in failed_checks and not partial_enabled):
+        decision = PaymentStatus.REJECTED
+        payment.status = PaymentStatus.REJECTED
+        payment.transaction_reference = ref or None
+        _log_verification(payment.id, ai_result, decision, passed_checks, failed_checks)
+        db.session.commit()
+        return PaymentStatus.REJECTED
+
+    # 2. Reviews: amount_overpaid, low_confidence, missing_reference, or AI outage
+    if "amount_overpaid" in failed_checks or "low_confidence" in failed_checks or "missing_reference" in failed_checks:
+        decision = PaymentStatus.REVIEW_REQUIRED
+        payment.status = PaymentStatus.REVIEW_REQUIRED
+        payment.transaction_reference = ref or None
+        _log_verification(payment.id, ai_result, decision, passed_checks, failed_checks)
+        db.session.commit()
+        return PaymentStatus.REVIEW_REQUIRED
+
+    # 3. Verified -> Apply Credit in single Postgres transaction
+    payment.transaction_reference = ref
+    return _apply_verified_credit(payment, ai_result, passed_checks, failed_checks)
+
+
+def _apply_verified_credit(payment: Payment, ai_result: PaymentAIExtraction, passed_checks=None, failed_checks=None, admin_approved=False) -> str:
+    """
+    Applies payment credit to owner's ledger in ONE transaction with SELECT FOR UPDATE lock.
+    Idempotent: if already verified, returns 'Verified' without double-crediting.
+    """
+    if payment.status == PaymentStatus.VERIFIED:
+        return PaymentStatus.VERIFIED
+
+    passed_checks = passed_checks or ["admin_approved" if admin_approved else "all_passed"]
+    failed_checks = failed_checks or []
+
+    with db.session.begin_nested():
+        # Lock owner row
+        if payment.user_id:
+            db.session.query(User).filter_by(id=payment.user_id).with_for_update().first()
+            user_id = payment.user_id
+            session_id = None
+        else:
+            db.session.query(GuestSession).filter_by(session_id_hash=payment.session_id).with_for_update().first()
+            user_id = None
+            session_id = payment.session_id
+
+        # Calculate balance before
+        balance_before = get_owner_balance(user_id, session_id)
+        credit_amount = Decimal(str(payment.amount_ghs))
+        balance_after = balance_before + credit_amount
+
+        # Update payment status
+        payment.status = PaymentStatus.VERIFIED
+        payment.verified_at = datetime.now(timezone.utc)
+
+        # Create Ledger Transaction (posted)
+        ledger = LedgerTransaction(
+            user_id=user_id,
+            session_id=session_id,
+            type=LedgerType.PAYMENT_CREDIT,
+            amount_ghs=credit_amount,
+            status=LedgerStatus.POSTED,
+            reference=payment.transaction_reference or payment.payment_id,
+            description=f"Mobile money top-up ({payment.network})",
+            balance_before=balance_before,
+            balance_after=balance_after
+        )
+        db.session.add(ledger)
+
+        # Log verification
+        _log_verification(payment.id, ai_result, PaymentStatus.VERIFIED, passed_checks, failed_checks)
+
+        # Create Notification
+        notif = Notification(
+            user_id=user_id,
+            session_id=session_id,
+            title="Payment Verified",
+            message=f"Your payment of GHS {credit_amount:.2f} has been verified and credited to your wallet."
+        )
+        db.session.add(notif)
+
+    db.session.commit()
+    return PaymentStatus.VERIFIED
+
+
+def _log_verification(payment_id: int, ai_result: PaymentAIExtraction, decision: str, passed_checks=None, failed_checks=None):
+    if hasattr(ai_result, "model_dump"):
+        raw_dict = ai_result.model_dump()
+    elif hasattr(ai_result, "dict"):
+        raw_dict = ai_result.dict()
+    else:
+        raw_dict = dict(ai_result)
+
+    pv = PaymentVerification(
+        payment_id=payment_id,
+        confidence=Decimal(str(ai_result.confidence or 0.0)),
+        decision=decision
+    )
+    pv.raw_ai_json = raw_dict
+    pv.checks_passed = passed_checks or []
+    pv.checks_failed = failed_checks or []
+    db.session.add(pv)
