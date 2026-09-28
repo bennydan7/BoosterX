@@ -105,13 +105,16 @@ class ProviderAdapter:
     def _post(self, action: str, **params: Any) -> Any:
         """
         POST to the provider with the given action + params.
-        Retries transient network/timeout errors; does NOT retry on
-        provider-returned business errors (those are final).
+        Retries transient network/timeout errors for idempotent reads ONLY.
+        NON-IDEMPOTENT actions ('add', 'cancel', 'refill') MUST NEVER BE RETRIED.
         """
         payload = {"key": self._api_key, "action": action, **params}
+        
+        # State-changing actions must never retry on network timeouts
+        retries_allowed = 0 if action in ("add", "cancel", "refill") else self._max_retries
 
         last_exc: Optional[Exception] = None
-        for attempt in range(self._max_retries + 1):
+        for attempt in range(retries_allowed + 1):
             try:
                 resp = self._session.post(
                     self._api_url, data=payload, timeout=self._timeout
@@ -122,9 +125,9 @@ class ProviderAdapter:
                 last_exc = exc
                 logger.warning(
                     "provider request failed (action=%s, attempt=%s/%s): %s",
-                    action, attempt + 1, self._max_retries + 1, exc,
+                    action, attempt + 1, retries_allowed + 1, exc,
                 )
-                if attempt < self._max_retries:
+                if attempt < retries_allowed:
                     time.sleep(self._retry_backoff * (attempt + 1))
                     continue
                 raise ProviderError(
@@ -139,7 +142,6 @@ class ProviderAdapter:
                 )
             return data
 
-        # Should be unreachable, but keeps type-checkers happy.
         raise ProviderError(
             f"Provider request failed for action '{action}'",
             action=action,
