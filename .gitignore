@@ -19,3 +19,12 @@ logs/
 # beside it.
 /.plugins/
 /.opencode-skills/
+
+# Backend ignores
+__pycache__/
+*.pyc
+*.db
+backend/uploads/*
+!backend/uploads/.gitkeep
+backend/boostx.db
+boostx_backend_starter.zip
