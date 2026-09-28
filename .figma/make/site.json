@@ -1,0 +1,10 @@
+{
+  "description": "Streamline your project workflow by accessing all app screens in one place for efficient design review and collaboration.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

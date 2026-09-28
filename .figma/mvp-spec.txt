@@ -1,0 +1,1084 @@
+1: 
+2: 
+3: BOOSTX
+4: 
+5: MVP Build Specification
+6: Guest-checkout SMM panel — TikTok, Instagram, Facebook, X, Telegram
+7: 
+8: Prepared for: Enock — Computer Science, University of Ghana
+9: Currency: Ghana Cedi (GHS) only
+10: Fulfillment provider API: boostcenter2.com/api/v2
+11: Document scope: architecture, database, pricing engine, provider
+12: integration, security, and phased build plan.
+13: 
+14: This document restructures and completes the BoostX product
+15: specification with implementation-ready detail for Phase 1.
+16: 
+17: Table of Contents
+18: 
+19: BOOSTX MVP Build Specification
+20: 
+21: Prepared for Enock — Computer Science, University of Ghana Page 1
+22: 
+23: 31.   Executive Summary
+24:  32.   The Five Non-Negotiable Rules
+25:  43.   Customer Journey
+26:  44.   Accounts & Authentication
+27:  65.   System Architecture
+28:  76.   Technology Stack
+29:  77.   Database Schema
+30:  88.   Pricing Engine — GHS Only
+31:  99.   Provider API Integration
+32:  1010.   Payment & AI Verification Flow
+33:  1211.   Order Lifecycle & Money Safety
+34:  1312.   Reliability Principle — What BoostX Defends Against
+35:  1313.   Admin Dashboard
+36:  1414.   API Endpoints
+37:  1515.   Security Requirements
+38:  1516.   MVP Build Phases
+39:  1617.   Critical Test Cases
+40:  1718.   Environment Variables Checklist
+41:  17Appendix A.   Code Delivered With This Specification
+42: 
+43: BOOSTX MVP Build Specification
+44: 
+45: Prepared for Enock — Computer Science, University of Ghana Page 2
+46: 
+47: 1.   Executive Summary
+48: 
+49: BoostX is a guest-checkout social media marketing (SMM) panel. A customer chooses a platform and service,
+50: enters a target link or username, pays by mobile money, uploads a payment screenshot, and receives an
+51: AI-verified spendable balance in Ghana Cedis (GHS). The order is then submitted to a fulfillment provider
+52: through a REST API, and the customer tracks delivery in real time — no account or password required.
+53: 
+54: This document restructures the original BoostX specification into an implementation-ready build guide. It
+55: covers the customer journey, system architecture, database schema, the pricing engine, the
+56: fulfillment-provider integration (boostcenter2.com/api/v2), payment verification, security requirements, and a
+57: phased MVP build plan.
+58: 
+59: Scope of this revision
+60: 
+61: Pricing Currency is GHS only. Customer price = provider cost (converted to GHS) + a flat
+62: GHS 5.00 markup, applied once per order.
+63: 
+64: Provider API Confirmed live against boostcenter2.com/api/v2 — a standard action-based SMM
+65: provider API (services, add, status, refill, cancel, balance).
+66: 
+67: Accounts Registration and login are new and optional. Customers and admins sign in on
+68: one shared page with no visible admin path; registering lets a customer track
+69: delivery status and full order history.
+70: 
+71: Reliability BoostX does not promise zero issues — no honest system can. Section 12
+72: indexes the specific failure modes it does defend against (double orders, provider
+73: failure, race conditions, fake screenshots) and names the gap that still needs
+74: pre-launch testing against the live provider.
+75: 
+76: 2.   The Five Non-Negotiable Rules
+77: 
+78: Rule 1 — Platform scope
+79: 
+80: Only five platforms: TikTok, Instagram, Facebook, X, Telegram. No others are shown to customers,
+81: regardless of what the provider catalog offers — confirmed against a live reference storefront
+82: (baloonboost.com/order), which lists nine (also Spotify, Audiomack, Threads, YouTube). BoostX deliberately
+83: shows five, not whatever the provider happens to support.
+84: 
+85: Rule 2 — Accounts are optional, never required
+86: 
+87: A customer can place an order as a guest, exactly as before. Registering is offered so they can track delivery
+88: status and order history, but nothing behind checkout is gated on having an account.
+89: 
+90: Rule 3 — AI-assisted verification
+91: 
+92: Payment screenshots are checked automatically by an AI verification service before any balance is credited.
+93: 
+94: Rule 4 — Spend only what is verified
+95: 
+96: A customer can never spend more than the amount successfully verified and credited to their BoostX balance.
+97: 
+98: Rule 5 — Backend is the authority
+99: 
+100: Price, payment, balance, and order validation are decided by the backend. The frontend is for display only
+101: and is never trusted.
+102: 
+103: BOOSTX MVP Build Specification
+104: 
+105: Prepared for Enock — Computer Science, University of Ghana Page 3
+106: 
+107: 3.   Customer Journey
+108: 
+109: End-to-end flow a first-time customer follows. An account is never required to order — registering only adds
+110: order tracking on top of the same flow:
+111: 
+112: 1.  Visit BoostX and select New Order — no sign-in prompt at this stage.
+113: 
+114: 2.  Select a platform (TikTok, Instagram, Facebook, X, or Telegram).
+115: 
+116: 3.  Select a service (e.g. TikTok Followers).
+117: 
+118: 4.  Enter the target link or username.
+119: 
+120: 5.  Enter quantity — BoostX shows a live price preview in GHS.
+121: 
+122: 6.  Pay the exact displayed amount via mobile money.
+123: 
+124: 7.  Upload a screenshot of the successful payment.
+125: 
+126: 8.  The AI verification service inspects the screenshot and confirms amount, recipient, status, and reference.
+127: 
+128: 9.  On success, the verified amount is credited to the customer's balance (guest session, or account if signed
+129: in).
+130: 
+131: 10.  The customer confirms the order; the backend re-checks balance and reserves the charge.
+132: 
+133: 11.  BoostX submits the order to the provider API and stores the returned provider order ID.
+134: 
+135: 12.  The customer tracks status (Pending → In Progress → Completed) using their BoostX order ID — or, if
+136: they register or sign in (Section 4), automatically inside their order history.
+137: 
+138: A guest who registers afterward doesn't lose their order history — see "Guest order claiming" in Section 4.
+139: 
+140: 4.   Accounts & Authentication
+141: 
+142: Customers can now register and log in to track deliveries and order history. Two rules shape everything in this
+143: section: accounts are optional (Rule 2), and customer accounts and admin accounts are never told apart
+144: anywhere the browser can see.
+145: 
+146: One shared login page
+147: 
+148: Customers and admins sign in through the exact same page, the exact same form (identifier + password), and
+149: the exact same API endpoint —  POST /api/auth/login. There is no "Admin login" link, tab, toggle, or
+150: hidden query parameter anywhere on the public site. The only place a login is ever treated differently is after
+151: the password check succeeds, when the backend looks up that account's role column and decides where to
+152: send the browser next.
+153: 
+154: Outcome What the browser is told
+155: 
+156: Customer credentials, correct Redirected to /account/orders. No mention of role in the response.
+157: 
+158: Admin credentials, correct Redirected to /admin. Same response shape as the customer case.
+159: 
+160: Wrong password "Incorrect email/phone or password." — identical wording either way.
+161: 
+162: Account doesn't exist at all The exact same "Incorrect email/phone or password." message — so
+163: the page can't be used to check which emails have accounts.
+164: 
+165: Account temporarily locked Also the exact same generic message, so a locked-out attacker can't
+166: tell they found a real account and just need to wait.
+167: 
+168: BOOSTX MVP Build Specification
+169: 
+170: Prepared for Enock — Computer Science, University of Ghana Page 4
+171: 
+172: Registration creates customers only
+173: 
+174: POST /api/auth/register hardcodes the new account's role to customer — there is no field, header, or
+175: parameter on that endpoint that can produce an admin account. Admin accounts are created exclusively by a
+176: separate function that is never wired to a public route: either a one-time seed script, or an internal endpoint
+177: that itself requires an already-authenticated admin session to call.
+178: 
+179: Login security (this matters more here than usual)
+180: 
+181: •  Passwords are hashed (PBKDF2/bcrypt) — never stored or logged in plain text.
+182: 
+183: •  5 failed attempts locks the account for 15 minutes; the lockout is invisible to the person trying — they still
+184: just see the generic error.
+185: 
+186: •  Session/role state is issued server-side as a signed token or server session; the browser can never edit its
+187: own role by tampering with a cookie or request body.
+188: 
+189: •  Rate limiting applies to the login endpoint itself, independent of the per-account lockout, since this one
+190: endpoint is also the admin's front door.
+191: 
+192: Guest order claiming
+193: 
+194: Guest checkout is unchanged (Section 7 keeps the guest_sessions table). When someone who already
+195: ordered as a guest later registers — or logs in — with the same phone number or email they used at
+196: checkout, BoostX automatically re-attaches those past orders to the new account, so order history doesn't
+197: start from zero. This only matches the contact details the person just typed into the form in front of them; it
+198: never scans for or pulls in anyone else's orders.
+199: 
+200: register_customer(email, phone, password)  ->  account created
+201:         |
+202:         v
+203: claim_guest_orders(user_id, email, phone)
+204:         |
+205:         v
+206: any guest order whose session used this email/phone -> orders.user_id = account
+207: 
+208: Order tracking once signed in
+209: 
+210: Endpoint Returns
+211: 
+212: GET /api/account/orders Every order on the account: platform, service, target, quantity,
+213: status, delivered timestamp
+214: 
+215: GET /api/account/orders/summary Counts: total placed, delivered, in progress, not delivered
+216: (canceled/failed/refunded)
+217: 
+218: Database additions
+219: 
+220: users
+221: 
+222: id, public_user_id, email, phone, password_hash, role, status, created_at, last_login_at,
+223: failed_login_attempts, locked_until
+224: 
+225: The existing  orders table gains a nullable  user_id column (foreign key to  users). A guest order has
+226: user_id = NULL and only a session_id; a claimed or account-placed order has both.
+227: 
+228: Implementation reference: models.py, auth_service.py, routes.py, order_history_service.py,
+229: claim_service.py — see Appendix A.
+230: 
+231: How this differs from a typical SMM panel account model
+232: 
+233: A reference storefront checked directly (baloonboost.com/order) uses the account-first model common to
+234: most SMM panels: registration and sign-in are the normal way in, with order tracking and balance living inside
+235: a personal cabinet. BoostX inverts that by design:
+236: 
+237: BOOSTX MVP Build Specification
+238: 
+239: Prepared for Enock — Computer Science, University of Ghana Page 5
+240: 
+241: Typical panel (e.g. BaloonBoost) BoostX
+242: 
+243: To place an order Account required up front Guest checkout — no account needed
+244: 
+245: To track orders Personal cabinet, requires login BoostX order ID works with no login;
+246: account optional for full history
+247: 
+248: Balance Held in the account's cabinet Held per guest session, or per account
+249: if signed in — same ledger either way
+250: 
+251: The practical result: New Order → choose service → pay → upload proof → order → track works start to
+252: finish without ever forcing registration. Accounts exist purely to add order history and delivery tracking on top
+253: of that same flow (Rule 2).
+254: 
+255: 5.   System Architecture
+256: 
+257: BoostX is a three-tier system: a frontend for guest ordering, a backend that owns all business rules, and a
+258: PostgreSQL database as the single source of truth for money and orders.
+259: 
+260: Customer
+261:   -> BoostX Frontend (Next.js / React)
+262:      -> BoostX Backend API (FastAPI or Flask)
+263:         -> Pricing Engine        (GHS pricing, flat markup)
+264:         -> Payment Verification  (AI vision + business rules)
+265:         -> Ledger Service        (append-only balance history)
+266:         -> Order Service         (validation, reservation)
+267:         -> Provider Adapter      (boostcenter2.com/api/v2)
+268:         -> Admin Service
+269:      -> PostgreSQL  (orders, payments, ledger, services)
+270:      -> Redis + background worker  (status sync, refills, cleanup)
+271:   -> SMM Provider API  (fulfillment)
+272:   -> AI Vision Service  (payment screenshot analysis)
+273: 
+274: Component responsibilities
+275: 
+276: Component Owns Never does
+277: 
+278: Frontend UI, forms, price preview, file upload,
+279: theme, tracking display Never holds provider API keys, admin
+280: secrets, or the final price/balance
+281: authority
+282: 
+283: Backend API All validation: service, target, quantity,
+284: price, balance, order Never trusts a price, balance, or
+285: service ID sent from the browser
+286: 
+287: Pricing Engine Converts provider USD cost to GHS and
+288: applies the flat markup Never exposes the provider's
+289: wholesale rate to the customer
+290: 
+291: Provider Adapter Talks to boostcenter2.com/api/v2 only Never lets a provider error reach the
+292: customer unfiltered
+293: 
+294: Background Worker Service sync, order-status polling, refills,
+295: session cleanup Never makes the customer wait on a
+296: live provider round-trip
+297: 
+298: BOOSTX MVP Build Specification
+299: 
+300: Prepared for Enock — Computer Science, University of Ghana Page 6
+301: 
+302: 6.   Technology Stack
+303: 
+304: Layer Choice Why
+305: 
+306: Frontend Next.js / React (or React + Vite) Fast guest-checkout UI, easy theming for
+307: light/dark mode
+308: 
+309: Backend FastAPI (or Flask) API-driven platform; FastAPI gives async
+310: I/O for provider polling
+311: 
+312: Database PostgreSQL ACID transactions — required for the ledger
+313: and atomic balance checks
+314: 
+315: Cache / Queue Redis Backs the background worker and rate
+316: limiting
+317: 
+318: Background jobs Celery or RQ Service sync, order-status polling, refills,
+319: cleanup
+320: 
+321: AI verification Vision-capable AI API Reads payment screenshots: amount,
+322: recipient, status, reference
+323: 
+324: Fulfillment boostcenter2.com/api/v2 Confirmed live provider API — see Section 9
+325: 
+326: File storage S3-compatible storage Payment screenshots, stored outside public
+327: execution paths
+328: 
+329: 7.   Database Schema
+330: 
+331: PostgreSQL tables. Every balance movement is a ledger row — the system never stores a bare running total.
+332: 
+333: users
+334: 
+335: id, public_user_id, email, phone, password_hash, role, status, created_at, last_login_at,
+336: failed_login_attempts, locked_until — see Section 4
+337: 
+338: guest_sessions
+339: 
+340: id, session_token, ip_hash, device_hash, phone, email, status, created_at, expires_at,
+341: last_seen_at
+342: 
+343: platforms
+344: 
+345: id, name, slug, icon, enabled, created_at
+346: 
+347: services
+348: 
+349: id, platform_id, provider_service_id, name, description, category, provider_rate,
+350: customer_rate, minimum, maximum, refill_available, enabled, sort_order, updated_at
+351: 
+352: payments
+353: 
+354: id, payment_reference, session_id, expected_amount, detected_amount, verified_amount, currency,
+355: payment_method, recipient_name, transaction_reference, screenshot_path, status,
+356: verification_score, created_at, verified_at
+357: 
+358: ledger_transactions
+359: 
+360: id, session_id, type, amount, balance_before, balance_after, reference_type, reference_id,
+361: status, created_at
+362: 
+363: BOOSTX MVP Build Specification
+364: 
+365: Prepared for Enock — Computer Science, University of Ghana Page 7
+366: 
+367: orders
+368: 
+369: id, public_order_id, session_id, user_id (nullable, added for accounts), service_id,
+370: provider_order_id, target, quantity, unit_price, charge, currency, status, start_count,
+371: remains, created_at, updated_at, completed_at
+372: 
+373: order_events
+374: 
+375: id, order_id, event_type, old_status, new_status, metadata, created_at
+376: 
+377: admin_actions
+378: 
+379: admin_id, action, object, old_value, new_value, timestamp, ip_address
+380: 
+381: Payment status values
+382: 
+383: pending  ·  verified  ·  rejected  ·  review  ·  expired
+384: 
+385: Ledger transaction types
+386: 
+387: payment_credit  ·  order_debit  ·  refund_credit  ·  adjustment
+388: 
+389: User roles / statuses
+390: 
+391: roles: customer  ·  admin   —   statuses: active  ·  suspended
+392: 
+393: 8.   Pricing Engine — GHS Only
+394: 
+395: BoostX prices exclusively in Ghana Cedis. The provider's USD cost is converted to GHS and a flat markup of
+396: GHS 5.00 is added once per order — not per unit, and not as a percentage. The formula:
+397: 
+398: customer_price_ghs =
+399:     (provider_rate_usd_per_1000 / 1000 * quantity * usd_to_ghs_rate)
+400:     + flat_markup_ghs   # default GHS 5.00
+401: 
+402: Worked example
+403: 
+404: Input Value
+405: 
+406: Provider service TikTok Followers (provider service ID 1)
+407: 
+408: Provider rate $0.90 per 1,000
+409: 
+410: Quantity ordered 1,000
+411: 
+412: USD → GHS rate (admin-configured) 10.70
+413: 
+414: Provider cost in GHS GHS 9.63
+415: 
+416: Flat markup + GHS 5.00
+417: 
+418: Customer price shown GHS 14.63
+419: 
+420: Rules enforced by the pricing engine
+421: 
+422: •  Runs server-side only. Any price shown by the frontend is a preview; the backend recalculates before
+423: charging.
+424: 
+425: •  The provider's wholesale USD rate is never returned to the customer — only the final GHS price.
+426: 
+427: •  Quantity is validated against the service's provider-defined minimum/maximum before a quote is produced.
+428: 
+429: •  Money values use fixed-point Decimal arithmetic, rounded half-up to 2 decimal places — never floating
+430: point.
+431: 
+432: BOOSTX MVP Build Specification
+433: 
+434: Prepared for Enock — Computer Science, University of Ghana Page 8
+435: 
+436: USD → GHS exchange rate
+437: 
+438: The USD/GHS rate is volatile — quotes checked across multiple sources in the same week ranged from
+439: roughly GHS 10.70 to GHS 15.18 per USD. This rate must be an admin-configurable setting (or refreshed
+440: automatically from a live FX feed on a schedule), never hardcoded. A stale rate silently erodes margin or
+441: overcharges customers.
+442: 
+443: Implementation reference: pricing_service.py — see Appendix A.
+444: 
+445: 9.   Provider API Integration
+446: 
+447: BoostX's fulfillment provider is  boostcenter2.com/api/v2. This was checked directly against the provider's
+448: published documentation. It is a standard SMM-panel API: a single POST endpoint, JSON responses, one
+449: action parameter per call.
+450: 
+451: Field Value
+452: 
+453: HTTP Method POST
+454: 
+455: API URL https://boostcenter2.com/api/v2
+456: 
+457: Response format JSON
+458: 
+459: Auth key parameter (your provider API key) sent on every request
+460: 
+461: Actions
+462: 
+463: action Purpose Key parameters
+464: 
+465: services Fetch the full service catalog (rate, min, max,
+466: refill flag) key, action
+467: 
+468: add Create an order key, action, service, link, quantity, runs*,
+469: interval*
+470: 
+471: status Check one order's status key, action, order
+472: 
+473: status (bulk) Check multiple orders at once key, action, orders (comma-separated)
+474: 
+475: refill Request a refill on an order key, action, order
+476: 
+477: refill_status Check a refill's status key, action, refill
+478: 
+479: cancel Cancel an order key, action, order
+480: 
+481: balance Check BoostX's balance held with the
+482: provider key, action
+483: 
+484: get-username Confirm the authenticated provider account key, action
+485: 
+486: BoostX adapter mapping
+487: 
+488: Each provider action is wrapped by exactly one method on ProviderAdapter (Appendix A), so the rest of
+489: the backend never constructs a raw provider request:
+490: 
+491: get_services()               -> action=services
+492: create_order(...)             -> action=add            -> provider_order_id
+493: get_order_status(id)          -> action=status          -> charge, status, remains
+494: get_multiple_order_status([]) -> action=status (bulk)   -> {id: status}
+495: request_refill(id)            -> action=refill          -> refill_id
+496: get_refill_status(id)         -> action=refill_status   -> status
+497: cancel_order(id)              -> action=cancel          -> bool
+498: 
+499: BOOSTX MVP Build Specification
+500: 
+501: Prepared for Enock — Computer Science, University of Ghana Page 9
+502: 
+503: get_provider_balance()        -> action=balance         -> (amount, currency)
+504: get_username()                -> action=get-username    -> username
+505: 
+506: Operational rules
+507: 
+508: •  The provider API key lives only in a server-side environment variable — never in frontend code.
+509: 
+510: •  Every provider call has a timeout and a small number of retries for network failures; provider-returned
+511: business errors (e.g. an invalid order ID) are not retried.
+512: 
+513: •  The service catalog is synced periodically by a background worker into PostgreSQL — the
+514: customer-facing dropdown never calls the provider live, keeping the site fast and within the provider's rate
+515: limits.
+516: 
+517: •  Order-status polling for pending orders should run on a schedule (roughly every 1–5 minutes, tuned to the
+518: provider's limits), not on every page load.
+519: 
+520: Reference checked separately: baloonboost.com/order is another provider-style storefront and was reviewed only for
+521: UI/platform-list reference — it is not BoostX's fulfillment provider.
+522: 
+523: Implementation reference: provider_client.py — see Appendix A.
+524: 
+525: 10.   Payment & AI Verification Flow
+526: 
+527: The customer pays by mobile money, uploads a screenshot, and the AI verification service extracts structured
+528: data before any balance is credited.
+529: 
+530: Payment account (configured, live)
+531: 
+532: Field Value
+533: 
+534: Method Telecel Cash
+535: 
+536: Account name BOOSTX
+537: 
+538: Account number 0202979378
+539: 
+540: The payment page always shows the exact GHS amount to send and states it must be sent in full — any
+541: cross-network fee is added on top by the sender's own network, not deducted from what BoostX receives (see
+542: below). This value is admin-editable (Section 13); it is never hardcoded in the frontend.
+543: 
+544: Instructions shown to the customer, by their own network
+545: 
+546: The payment screen shows steps for the customer's own sending network only — either auto-detected from a
+547: phone number they've entered, or picked from three tabs (Telecel / MTN / AirtelTigo). Same-network Telecel
+548: payments have no fee; sending from MTN or AirtelTigo is a cross-network transfer and carries a small fee
+549: charged to the sender.
+550: 
+551: Sending from Telecel Cash — same network, no fee
+552: 1.  Dial *110#
+553: 
+554: 2.  Select Send Money
+555: 
+556: 3.  Enter 0202979378
+557: 
+558: 4.  Enter the amount
+559: 
+560: 5.  Enter PIN to confirm
+561: 
+562: Sending from MTN Mobile Money — cross-network fee applies
+563: 1.  Dial *170#
+564: 
+565: 2.  Select Transfer Money
+566: 
+567: 3.  Select Other Networks
+568: 
+569: 4.  Select Telecel
+570: 
+571: BOOSTX MVP Build Specification
+572: 
+573: Prepared for Enock — Computer Science, University of Ghana Page 10
+574: 
+575: 5.  Enter 0202979378
+576: 
+577: 6.  Enter the amount
+578: 
+579: 7.  Confirm the recipient name shown (should read BOOSTX)
+580: 
+581: 8.  Enter PIN
+582: 
+583: Sending from AirtelTigo Money — cross-network fee applies
+584: 1.  Dial *110#
+585: 
+586: 2.  Select Send Money
+587: 
+588: 3.  Select To Mobile Number
+589: 
+590: 4.  Select Other Networks → Telecel
+591: 
+592: 5.  Enter 0202979378
+593: 
+594: 6.  Enter the amount
+595: 
+596: 7.  Enter PIN
+597: 
+598: Cross-network transfers usually land within seconds to a few minutes. If a payment isn't credited within 10
+599: minutes, the customer should check their SMS confirmation before retrying — cross-network MoMo transfers
+600: are final and cannot be auto-reversed, so the recipient number and name are worth confirming before
+601: sending.
+602: 
+603: The customer's SMS confirmation is exactly what the payment-screenshot upload should capture — amount, recipient name,
+604: and reference are the fields Section 10's AI verification checks below.
+605: 
+606: What the AI extracts
+607: 
+608: Amount   ·  Recipient/account name   ·  Transaction/reference   ·  Payment status   ·  Date/time   ·  Payment
+609: provider
+610: 
+611: Checks the backend applies to the AI result
+612: 
+613: 1.  Amount — does the screenshot show a valid payment amount?
+614: 
+615: 2.  Recipient — does the account name match BoostX's configured payment account?
+616: 
+617: 3.  Transaction status — does the transaction show as successful?
+618: 
+619: 4.  Reference — is there a transaction/reference number?
+620: 
+621: 5.  Date/time — is the transaction recent enough to still be valid?
+622: 
+623: 6.  Duplicate detection — has this reference already been used?
+624: 
+625: 7.  Screenshot integrity — any inconsistencies or missing information?
+626: 
+627: 8.  Provider verification — where a real payment-gateway API is available, verify against it rather than the
+628: screenshot alone.
+629: 
+630: A screenshot is evidence, not cryptographic proof of payment. Unverifiable or suspicious transactions must be
+631: held as review_required rather than auto-credited.
+632: 
+633: The non-negotiable separation
+634: 
+635: AI result  →  backend business rules  →  ledger transaction. The AI service never writes
+636: directly to the balance.
+637: 
+638: BOOSTX MVP Build Specification
+639: 
+640: Prepared for Enock — Computer Science, University of Ghana Page 11
+641: 
+642: Partial and over-payment policy
+643: 
+644: Scenario Rule
+645: 
+646: Detected amount < expected No silent full credit. Either reject, or credit exactly the detected amount
+647: if partial-credit is enabled.
+648: 
+649: Detected amount > expected The extra amount is never silently spent — apply a defined policy
+650: (credit the full verified amount, or hold for review).
+651: 
+652: Duplicate transaction reference Second use of the same reference is rejected: "Transaction already
+653: used." Enforce a DB unique constraint on the reference.
+654: 
+655: 11.   Order Lifecycle & Money Safety
+656: 
+657: Final order validation (on "Confirm Order")
+658: 
+659: 1.  Retrieve the service and confirm it is active
+660: 
+661: 2.  Verify the platform is enabled
+662: 
+663: 3.  Validate the target format
+664: 
+665: 4.  Validate quantity against min/max
+666: 
+667: 5.  Retrieve the current selling price from the pricing engine
+668: 
+669: 6.  Retrieve the customer's verified ledger balance
+670: 
+671: 7.  Check available balance ≥ charge
+672: 
+673: 8.  Reserve/deduct the amount atomically
+674: 
+675: 9.  Submit the order to the provider
+676: 
+677: 10.  Save the returned provider order ID
+678: 
+679: 11.  Create the BoostX order record
+680: 
+681: 12.  Return the order confirmation
+682: 
+683: If any step fails, reserved money is restored to the customer's balance. Money is never lost between
+684: reservation and provider confirmation.
+685: 
+686: Anti-race-condition rule
+687: 
+688: Example: balance GHS 50. Two browser tabs each submit a GHS 40 order at the same moment. The
+689: database transaction must lock/check the balance atomically so only one order can succeed — the balance
+690: must never go negative.
+691: 
+692: Idempotency
+693: 
+694: If "Confirm Order" is clicked three times on a slow connection, BoostX must create exactly one provider order.
+695: Use an idempotency key (e.g. BX-IDEMP-839201); a repeated request returns the original order instead of
+696: creating a new one.
+697: 
+698: Provider failure handling
+699: 
+700: Event Result
+701: 
+702: Provider call fails after reservation Reserved amount is released back to the customer's
+703: balance; event PROVIDER_ORDER_FAILED is recorded.
+704: 
+705: Provider call succeeds Ledger moves from reserved to debited; order status
+706: becomes active.
+707: 
+708: Order statuses
+709: 
+710: Pending  ·  In Progress  ·  Completed  ·  Partial  ·  Canceled  ·  Failed  ·  Refunded
+711: 
+712: BOOSTX MVP Build Specification
+713: 
+714: Prepared for Enock — Computer Science, University of Ghana Page 12
+715: 
+716: 12.   Reliability Principle — What BoostX Defends
+717: Against
+718: 
+719: No real system can honestly guarantee zero issues — a provider will time out, a screenshot will be blurry, a
+720: customer will double-click. BoostX's design goal is narrower and achievable: common failures should never
+721: cost the customer their money or leave an order in an undefined state. The table below is a single index
+722: of where that promise is actually enforced elsewhere in this document — nothing here is new behavior, it is a
+723: deliberate summary of it.
+724: 
+725: Failure scenario What BoostX does about it Where
+726: 
+727: Customer double-clicks
+728: “Confirm Order” An idempotency key ensures exactly one provider order
+729: is created; repeats return the original order. Section 11
+730: 
+731: Provider API fails after money
+732: was reserved The reserved amount is released back to the customer's
+733: balance; the failure is logged as an event. Section 11
+734: 
+735: Two orders submitted at the
+736: same instant The balance check and deduction are atomic — only
+737: one order can succeed; the balance never goes
+738: negative.
+739:  Section 11
+740: 
+741: Fake, edited, or duplicate
+742: payment screenshot AI verification checks amount, recipient, reference,
+743: status, and date, and rejects a reused reference
+744: outright.
+745:  Section 10
+746: 
+747: Provider API key leaking to the
+748: browser The key is a server-side-only environment variable; the
+749: frontend never sees or sends it. Sections 9, 15
+750: 
+751: A provider service behaves
+752: differently than documented Every provider response is validated and wrapped
+753: before use; an unexpected shape raises a handled
+754: error, never a silent bad charge.
+755:  Section 9
+756: 
+757: What this section does not claim
+758: 
+759: This is deliberately not a claim that BoostX will run issue-free. It is a claim that the specific failure modes
+760: above — the ones that would otherwise cost a customer money or leave an order unaccounted for — are
+761: each handled by a concrete, testable rule rather than left to chance. New failure modes will surface in
+762: production that aren't on this list yet; Section 17's pre-launch validation step exists precisely to find them
+763: before customers do.
+764: 
+765: 13.   Admin Dashboard
+766: 
+767: Administrators sign in through the exact same shared login page as customers (Section 4) — there is no
+768: separate /admin/login page to discover. A correct admin login simply redirects to  /admin instead of the
+769: customer order-tracking view; everything past that point (2FA, rate-limited login, admin session) applies as
+770: before.
+771: 
+772: Area Admin can
+773: 
+774: Overview See today's orders, today's revenue, pending/verified/failed payments, active orders,
+775: provider balance
+776: 
+777: Payments Review payment ID, session, expected vs AI-detected amount, recipient, reference, AI
+778: result, and manually resolve review-required cases
+779: 
+780: Services Enable/disable a service; change customer price, minimum, maximum, description,
+781: category, refill availability
+782: 
+783: BOOSTX MVP Build Specification
+784: 
+785: Prepared for Enock — Computer Science, University of Ghana Page 13
+786: 
+787: Area Admin can
+788: 
+789: Platforms Enable/disable TikTok, Instagram, Facebook, X, Telegram — no others are shown to
+790: customers
+791: 
+792: Orders View, track, cancel (where supported), refill (where supported), view events, view the
+793: linked payment
+794: 
+795: Payment settings Configure payment method, account name/number, instructions, currency, min/max
+796: payment, AI verification rules — configured today as Telecel Cash, BOOSTX,
+797: 0202979378 (Section 10)
+798: 
+799: Provider settings Configure provider name, API URL, API key (server-side secret only), markup, sync
+800: interval
+801: 
+802: Audit log Every admin action recorded: admin ID, action, object, old value, new value,
+803: timestamp
+804: 
+805: 14.   API Endpoints
+806: 
+807: Authentication (shared by customers and admins)
+808: 
+809: POST /api/auth/register       # always creates a customer account
+810: POST /api/auth/login          # single endpoint for BOTH roles
+811: POST /api/auth/logout
+812: GET  /api/auth/me             # role known only after a session exists
+813: 
+814: Customer-facing
+815: 
+816: GET /api/platforms
+817: GET /api/services
+818: GET /api/services/:id
+819: POST /api/session
+820: POST /api/payments
+821: POST /api/payments/:id/screenshot
+822: GET /api/payments/:id
+823: GET /api/balance
+824: POST /api/orders/preview
+825: POST /api/orders
+826: GET /api/orders/:public_id
+827: GET /api/orders/:public_id/status
+828: POST /api/orders/:public_id/refill
+829: POST /api/orders/:public_id/cancel
+830: 
+831: Account-holder only (requires a signed-in session)
+832: 
+833: GET /api/account/orders
+834: GET /api/account/orders/summary
+835: 
+836: Admin
+837: 
+838: GET /api/admin/dashboard
+839: GET /api/admin/payments
+840: GET /api/admin/orders
+841: GET /api/admin/services
+842: PATCH /api/admin/services/:id
+843: GET /api/admin/settings
+844: PATCH /api/admin/settings
+845: GET /api/admin/audit-log
+846: POST /api/admin/admins        # create an admin; caller must
+847:                                # already be an authenticated admin
+848: 
+849: Note: there is no POST /api/admin/login — admins authenticate through POST /api/auth/login, the same endpoint customers
+850: use (Section 4).
+851: 
+852: BOOSTX MVP Build Specification
+853: 
+854: Prepared for Enock — Computer Science, University of Ghana Page 14
+855: 
+856: 15.   Security Requirements
+857: 
+858: Never trusted from the browser
+859: 
+860: price  ·  quantity  ·  service ID  ·  balance  ·  role — the backend always re-derives these itself.
+861: 
+862: Secrets — server-side only, never in frontend code
+863: 
+864: DATABASE_URL
+865: PROVIDER_API_URL
+866: PROVIDER_API_KEY
+867: AI_API_KEY
+868: SECRET_KEY
+869: ADMIN_SECRET
+870: PAYMENT_ACCOUNT_NAME
+871: PAYMENT_ACCOUNT_NUMBER
+872: PAYMENT_METHOD
+873: CURRENCY=GHS
+874: 
+875: File upload security
+876: 
+877: •  Accept image formats only (PNG, JPG, JPEG, WEBP); enforce a maximum file size.
+878: 
+879: •  Never use the customer's original filename as a storage path.
+880: 
+881: •  Rename internally, e.g. /payments/2026/09/BX-PAY-839201-randomid.webp.
+882: 
+883: •  Store outside publicly executable paths, with controlled access.
+884: 
+885: Platform-wide controls
+886: 
+887: •  HTTPS everywhere; secure, expiring sessions
+888: 
+889: •  CSRF protection where applicable
+890: 
+891: •  Rate limiting on payment upload, order creation, order tracking, the shared login endpoint, and AI
+892: verification
+893: 
+894: •  Input validation and file-type/size validation on every upload
+895: 
+896: •  SQL injection protection via parameterized queries / ORM
+897: 
+898: •  Audit logs for every admin action; request logging with no secrets in logs
+899: 
+900: •  Idempotency keys on order creation; unique constraint on transaction references
+901: 
+902: Shared login page hardening
+903: 
+904: •  Identical error message for wrong password, unknown account, and locked account — no enumeration.
+905: 
+906: •  Account lockout after 5 failed attempts (15 minutes) — enforced per account, not just per IP.
+907: 
+908: •  Passwords hashed with PBKDF2/bcrypt; never logged, never returned in any API response.
+909: 
+910: •  Role is read from the database after authentication, never accepted as input from the client.
+911: 
+912: •  Registration can only ever produce a customer account; admin accounts require an already-authenticated
+913: admin.
+914: 16.   MVP Build Phases
+915: 
+916: Phase 1 — Launch scope
+917: 
+918: •  Branding, homepage, New Order flow, five platforms, service selection, GHS pricing
+919: 
+920: •  Guest sessions, payment instructions, screenshot upload, AI verification, ledger
+921: 
+922: •  Order creation, provider API integration, order tracking
+923: 
+924: •  Light/dark mode
+925: 
+926: BOOSTX MVP Build Specification
+927: 
+928: Prepared for Enock — Computer Science, University of Ghana Page 15
+929: 
+930: •  Customer registration and login, shared with admin login, order history and delivery tracking, guest order
+931: claiming
+932: 
+933: •  Admin dashboard, PostgreSQL
+934: 
+935: Phase 2 — Near-term additions
+936: 
+937: •  Refills, cancellation, refund automation
+938: 
+939: •  Email and SMS/WhatsApp notifications
+940: 
+941: •  Advanced analytics
+942: 
+943: •  Multiple payment methods
+944: 
+945: Future — Not in MVP
+946: 
+947: •  Customer accounts and wallets, saved targets, order templates
+948: 
+949: •  Promo codes, referral system, loyalty points
+950: 
+951: •  Multiple currencies, multiple providers with automatic failover
+952: 
+953: •  Advanced fraud detection, mobile app
+954: 
+955: MVP is successful when a brand-new customer can
+956: 
+957: Visit BoostX → pick a platform and service → enter target and quantity → see the GHS price → pay → upload
+958: a screenshot → get AI-verified balance → place the order with no account → have it submitted through the
+959: provider API → track it to completion → receive a refund/credit if it fails — all on mobile or desktop, light or
+960: dark mode.
+961: 
+962: 17.   Critical Test Cases
+963: 
+964: These four scenarios must pass before launch — they protect real money:
+965: 
+966: # Scenario Expected result
+967: 
+968: 1 Balance GHS 50. Two simultaneous orders of
+969: GHS 40 each. Exactly one order succeeds; the other is
+970: rejected. Balance never goes negative.
+971: 
+972: 2 Expected payment GHS 50; screenshot shows
+973: GHS 20. No GHS 50 credit is given. Only the
+974: verified/policy-defined amount is credited.
+975: 
+976: 3 Same transaction reference (e.g. ABC123)
+977: uploaded twice. Second attempt is rejected: "Transaction already
+978: used."
+979: 
+980: 4 Balance GHS 50; order GHS 30 is placed;
+981: provider call fails. Customer's balance returns to GHS 50 — not left
+982: at GHS 20.
+983: 
+984: Also verify
+985: 
+986: •  Frontend and backend on mobile, tablet, desktop, light mode, and dark mode
+987: 
+988: •  Form validation, upload validation, order tracking by public order ID
+989: 
+990: •  Refund logic on cancel/fail/partial
+991: 
+992: •  Admin authorization boundaries
+993: 
+994: •  API-key exposure checks — confirm no secret appears in any frontend bundle or client response
+995: 
+996: •  Shared login: wrong password, unknown account, and a locked account all return the identical error
+997: 
+998: •  The register endpoint cannot be made to produce an admin account under any input
+999: 
+1000: •  Guest order claiming links only orders matching the contact details entered at registration/login — never
+1001: someone else's
+1002: 
+1003: BOOSTX MVP Build Specification
+1004: 
+1005: Prepared for Enock — Computer Science, University of Ghana Page 16
+1006: 
+1007: Pre-launch validation — provider service mapping
+1008: 
+1009: Section 9 confirms the shape of boostcenter2.com/api/v2 — the actions, parameters, and response fields.
+1010: That is not the same as confirming every individual service behaves correctly. Before launch, each of the five
+1011: platforms' live services needs its own pass:
+1012: 
+1013: •  Call services for real and confirm every service BoostX intends to sell is actually present, priced, and
+1014: within a sane min/max.
+1015: 
+1016: •  Place one small real order per platform end-to-end (pay → verify → submit → track) and confirm the
+1017: provider order ID, status transitions, and final delivery all match what the customer sees.
+1018: 
+1019: •  Confirm refill and cancel behave as documented for the specific services that advertise them — not every
+1020: provider service supports both, regardless of what the catalog flag says.
+1021: 
+1022: •  Re-run the four money-safety test cases above against the real provider, not a mock — provider failure
+1023: handling (Section 11) is only proven once it's been triggered against the live API.
+1024: 
+1025: This step is what turns “the API was checked” into “BoostX is safe to launch” — the two are not the same claim, and the gap
+1026: between them is exactly what this checklist closes.
+1027: 
+1028: 18.   Environment Variables Checklist
+1029: 
+1030: DATABASE_URL=
+1031: PROVIDER_API_URL=https://boostcenter2.com/api/v2
+1032: PROVIDER_API_KEY=
+1033: AI_API_KEY=
+1034: SECRET_KEY=
+1035: ADMIN_SECRET=
+1036: PAYMENT_ACCOUNT_NAME=BOOSTX
+1037: PAYMENT_ACCOUNT_NUMBER=0202979378
+1038: PAYMENT_METHOD=Telecel Cash
+1039: CURRENCY=GHS
+1040: USD_TO_GHS_RATE=          # admin-editable; do not hardcode long-term
+1041: FLAT_MARKUP_GHS=5.00
+1042: 
+1043: Even though the payment account is now known, it stays an environment variable rather than a hardcoded string — Section
+1044: 13's admin settings screen reads and writes this same value, so it can change without a redeploy.
+1045: 
+1046: Appendix A.   Code Delivered With This Specification
+1047: 
+1048: Seven backend modules implement Sections 4, 8, and 9 of this document and were provided alongside this
+1049: PDF, across three prior turns:
+1050: 
+1051: File Implements
+1052: 
+1053: pricing_service.py PricingService / PricingSettings — GHS conversion + flat GHS 5.00
+1054: markup, Decimal-safe rounding, quantity-range validation (Section 8)
+1055: 
+1056: provider_client.py ProviderAdapter — full boostcenter2.com/api/v2 coverage: services, add,
+1057: status (single + bulk), refill, refill_status, cancel, balance, get-username,
+1058: with retries and error wrapping (Section 9)
+1059: 
+1060: models.py User model, roles (customer/admin), password hashing, lockout fields
+1061: (Section 4)
+1062: 
+1063: auth_service.py AuthService — unified authenticate(), customer-only register_customer(),
+1064: separate create_admin_account(), generic error messages, lockout logic
+1065: (Section 4)
+1066: 
+1067: routes.py Flask blueprint: shared POST /api/auth/login, POST /api/auth/register,
+1068: logout, /me (Section 4, Section 14)
+1069: 
+1070: BOOSTX MVP Build Specification
+1071: 
+1072: Prepared for Enock — Computer Science, University of Ghana Page 17
+1073: 
+1074: File Implements
+1075: 
+1076: order_history_service.py OrderHistoryService — per-account order list and
+1077: delivered/in-progress/not-delivered summary (Section 4)
+1078: 
+1079: claim_service.py ClaimService — re-attaches a customer's past guest orders on
+1080: registration/login by matching email or phone (Section 4)
+1081: 
+1082: End of document — BoostX MVP Build Specification.
+
+(End of file — 1082 lines.)
