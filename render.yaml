@@ -2,8 +2,8 @@ services:
   - type: web
     name: boostx-web
     env: python
-    buildCommand: "npm run build && pip install -r backend/requirements.txt"
-    startCommand: "gunicorn --bind 0.0.0.0:$PORT 'backend.app:create_app()'"
+    buildCommand: "pip install -r backend/requirements.txt"
+    startCommand: "flask db upgrade && gunicorn --bind 0.0.0.0:$PORT 'backend.app:create_app()'"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.1
@@ -11,19 +11,25 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: boostx-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: boostx-redis
+          property: connectionString
       - key: PROVIDER_MODE
         value: live
       - key: PROVIDER_API_URL
         value: https://boostcenter2.com/api/v2
       - key: PROVIDER_API_KEY
         sync: false
-      - key: OPENAI_API_KEY
+      - key: AI_API_KEY
         sync: false
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: boostx-redis
-          property: connectionString
+      - key: AI_MODEL
+        value: gpt-4o-mini
 
   - type: worker
     name: boostx-worker
@@ -33,21 +39,33 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.1
+      - key: DATABASE_URL
+        fromDatabase:
+          name: boostx-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: boostx-redis
+          property: connectionString
       - key: PROVIDER_MODE
         value: live
       - key: PROVIDER_API_URL
         value: https://boostcenter2.com/api/v2
       - key: PROVIDER_API_KEY
         sync: false
-      - key: OPENAI_API_KEY
+      - key: AI_API_KEY
         sync: false
-      - key: REDIS_URL
-        fromService:
-          type: redis
-          name: boostx-redis
-          property: connectionString
+      - key: AI_MODEL
+        value: gpt-4o-mini
 
   - type: redis
     name: boostx-redis
     ipAllowList: []
+    plan: free
+
+databases:
+  - name: boostx-db
+    databaseName: boostx_db
+    user: boostx
     plan: free

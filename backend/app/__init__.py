@@ -21,6 +21,15 @@ def create_app(config_class=Config):
     )
     app.config.from_object(config_class)
 
+    # In production / non-testing environments, enforce Postgres requirement for row locking
+    if not app.config.get("TESTING"):
+        db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        if not db_uri.startswith("postgresql://"):
+            raise RuntimeError(
+                "DATABASE_URL must be a PostgreSQL connection string (postgresql://) in non-testing environments. "
+                "SQLite does not support row-level locking (SELECT FOR UPDATE)."
+            )
+
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)

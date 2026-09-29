@@ -14,11 +14,11 @@ def process_payment_verification(payment: Payment, ai_result: PaymentAIExtractio
     Runs verification and ledger crediting in ONE transaction with owner lock.
     Returns decision: 'Verified', 'Rejected', 'Review Required', or 'Expired'.
     """
-    now = datetime.now(timezone.utc)
-    payment_expires = payment.expires_at.replace(tzinfo=timezone.utc) if payment.expires_at.tzinfo is None else payment.expires_at
+    now_utc = datetime.utcnow()
+    payment_expires = payment.expires_at.replace(tzinfo=None) if payment.expires_at and payment.expires_at.tzinfo is not None else payment.expires_at
 
     # 1. Check expiration
-    if now > payment_expires and payment.status not in (PaymentStatus.VERIFIED, PaymentStatus.REJECTED):
+    if payment_expires and now_utc > payment_expires and payment.status not in (PaymentStatus.VERIFIED, PaymentStatus.REJECTED):
         payment.status = PaymentStatus.EXPIRED
         db.session.commit()
         return PaymentStatus.EXPIRED

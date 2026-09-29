@@ -1,6 +1,17 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-boostx}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-boostx_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-boostx_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
   web:
     build: .
     command: gunicorn --bind 0.0.0.0:5000 --workers 4 "backend.app:create_app()"
@@ -9,17 +20,18 @@ services:
     environment:
       - FLASK_ENV=production
       - SECRET_KEY=${SECRET_KEY:-boostx-production-secret-key-32-chars-min}
-      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/backend/boostx.db}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://boostx:boostx_pass@db:5432/boostx_db}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - PROVIDER_MODE=${PROVIDER_MODE:-live}
       - PROVIDER_API_URL=${PROVIDER_API_URL:-https://boostcenter2.com/api/v2}
       - PROVIDER_API_KEY=${PROVIDER_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
     depends_on:
+      - db
       - redis
     volumes:
       - uploads_data:/app/backend/uploads
-      - db_data:/app/backend
 
   worker:
     build: .
@@ -27,17 +39,18 @@ services:
     environment:
       - FLASK_ENV=production
       - SECRET_KEY=${SECRET_KEY:-boostx-production-secret-key-32-chars-min}
-      - DATABASE_URL=${DATABASE_URL:-sqlite:////app/backend/boostx.db}
+      - DATABASE_URL=${DATABASE_URL:-postgresql://boostx:boostx_pass@db:5432/boostx_db}
       - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
       - PROVIDER_MODE=${PROVIDER_MODE:-live}
       - PROVIDER_API_URL=${PROVIDER_API_URL:-https://boostcenter2.com/api/v2}
       - PROVIDER_API_KEY=${PROVIDER_API_KEY}
-      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_MODEL=${AI_MODEL:-gpt-4o-mini}
     depends_on:
+      - db
       - redis
     volumes:
       - uploads_data:/app/backend/uploads
-      - db_data:/app/backend
 
   redis:
     image: redis:7-alpine
@@ -45,5 +58,5 @@ services:
       - "6379:6379"
 
 volumes:
+  postgres_data:
   uploads_data:
-  db_data:

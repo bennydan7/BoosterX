@@ -2,6 +2,7 @@ import os
 from decimal import Decimal
 
 class Config:
+    TESTING = os.getenv("TESTING", "false").lower() in ("true", "1")
     SECRET_KEY = os.getenv("SECRET_KEY", "boostx-secret-key-change-in-production")
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",
@@ -19,14 +20,14 @@ class Config:
     PROVIDER_API_KEY = os.getenv("PROVIDER_API_KEY", "mock-provider-key")
     
     # AI Vision Verification Settings
-    AI_API_URL = os.getenv("AI_API_URL", "https://api.openai.com/v1")
-    AI_API_KEY = os.getenv("AI_API_KEY", "")
-    AI_MODEL = os.getenv("AI_MODEL", "gpt-4o-mini")
+    AI_API_URL = os.getenv("AI_API_URL", os.getenv("OPENAI_API_URL", "https://api.openai.com/v1"))
+    AI_API_KEY = os.getenv("AI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
+    AI_MODEL = os.getenv("AI_MODEL", os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini"))
     
     # FX Rate Settings
     FX_API_URL = os.getenv("FX_API_URL", "")
-    DEFAULT_USD_TO_GHS = Decimal(os.getenv("USD_TO_GHS_RATE", "10.70"))
-    DEFAULT_FLAT_MARKUP_GHS = Decimal(os.getenv("FLAT_MARKUP_GHS", "5.00"))
+    DEFAULT_USD_TO_GHS = Decimal(os.getenv("USD_TO_GHS_RATE", os.getenv("DEFAULT_USD_TO_GHS", "10.70")))
+    DEFAULT_FLAT_MARKUP_GHS = Decimal(os.getenv("FLAT_MARKUP_GHS", os.getenv("DEFAULT_FLAT_MARKUP_GHS", "5.00")))
     
     # Session & Claiming Settings
     SESSION_COOKIE_NAME = "boostx_session"
