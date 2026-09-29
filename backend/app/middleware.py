@@ -1,3 +1,4 @@
+import os
 import secrets
 from functools import wraps
 from flask import request, jsonify, session, current_app
@@ -6,16 +7,22 @@ from flask_limiter.util import get_remote_address
 from backend.app.auth.session import get_current_user
 from backend.app.models.user import UserRole
 
+# "memory://" storage keeps a separate counter per worker process, so under
+# gunicorn --workers 4 a "5 per minute" limit is actually ~20/minute, and
+# every counter resets on each deploy/restart. Redis (already a hard
+# dependency for RQ) gives one shared counter across all workers/dynos.
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=[],
-    storage_uri="memory://"
+    storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
 )
+
 
 def get_csrf_token() -> str:
     if "csrf_token" not in session:
         session["csrf_token"] = secrets.token_hex(16)
     return session["csrf_token"]
+
 
 def validate_csrf():
     """Validate CSRF token header on state-changing requests."""
@@ -28,6 +35,7 @@ def validate_csrf():
         if not expected_token or not sent_token or not secrets.compare_digest(sent_token, expected_token):
             return jsonify({"error": "Invalid or missing CSRF token."}), 403
     return None
+
 
 def admin_required(f):
     """
