@@ -35,3 +35,23 @@ This document logs all key architectural, security, and design decisions made du
 - **Context**: Clients might attempt to send price estimates in order creation requests.
 - **Decision**: All order quotes and transactions calculate service price on the server: `customer_price_ghs = ceil_or_halfup((provider_cost_usd / 1000 * qty * usd_to_ghs_rate) + flat_markup_ghs)`. Client-supplied prices are completely ignored.
 - **Rationale**: Protects against tampering and price drift.
+
+### DEC-007: Flask-Limiter Endpoint Scoping & Tiered Limits
+- **Context**: Brute-force protection for auth, payment submission, order creation, and public order tracking.
+- **Decision**: Implemented `Flask-Limiter` with memory/Redis backing:
+  - Auth (`/api/auth/login`, `/api/auth/register`): 5 requests / min
+  - Payment Creation & Screenshot Upload (`/api/payments`): 10 requests / min
+  - Order Creation (`/api/orders` POST): 20 requests / min
+  - Public Order Tracking (`/api/orders/:public_id` GET): 60 requests / min
+- **Rationale**: Tight restrictions on authentication endpoints prevent brute-force attacks on the admin login door, while looser tracking limits preserve public guest order lookup functionality.
+
+### DEC-008: Non-Testing Environment PostgreSQL Strict Enforcement
+- **Context**: SQLite does not support row-level locking (`SELECT FOR UPDATE`), causing SQLAlchemy to silently drop lock guarantees under concurrent access.
+- **Decision**: `create_app()` raises `RuntimeError` on boot in non-testing environments (`TESTING=False`) if `DATABASE_URL` is not a `postgresql://` connection string.
+- **Rationale**: Guarantees that production deployments never run on SQLite where money-safety row locks would no-op.
+
+### DEC-009: Repository Top-Level Restructuring (`frontend/` & `backend/`)
+- **Context**: Spec and prompt required clear separation of root-level frontend and backend concerns.
+- **Decision**: Moved `src/`, `public/`, `index.html`, `vite.config.ts`, `tsconfig.json`, `package.json`, `package-lock.json` into `frontend/` using `git mv`. Root directory retains `frontend/`, `backend/`, `docs/`, `Dockerfile`, `docker-compose.yml`, `render.yaml`, `README.md`, and `.gitignore`.
+- **Rationale**: Organizes mono-repo clearly, preserves git history, and aligns build scripts and Docker container paths.
+

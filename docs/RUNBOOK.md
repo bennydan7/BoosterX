@@ -92,3 +92,21 @@ To run manual background tasks on demand from CLI:
 The AI payment vision extractor lives in `backend/app/ai/payment_ai.py`.
 - **System Prompt Calibration**: Edits to the vision extraction prompt should be tested against sample receipts in `backend/tests/fixtures/`.
 - **Confidence Threshold**: The decision engine in `backend/app/payments/decision_engine.py` flags payments with confidence < 0.85 for manual review.
+
+---
+
+## 7. Troubleshooting Common Errors
+
+### Worker Service Won't Start
+- **Symptoms**: Worker container crashes or exits immediately on startup.
+- **Cause**: Attempting to run legacy missing module (`backend.app.workers.scheduler`) or invalid Redis connection URI.
+- **Resolution**: Ensure the worker command executes `python -m backend.app.workers.scheduler`. If Redis is offline or unavailable, the scheduler automatically logs a warning and falls back to an in-process thread loop for local development.
+
+### Concurrency Test Fails Locally (SQLite vs PostgreSQL)
+- **Symptoms**: Concurrency test errors or reports double order success under simultaneous requests.
+- **Cause**: Running concurrency tests against SQLite. SQLite silently no-ops SQLAlchemy `SELECT FOR UPDATE` row locks.
+- **Resolution**: Point `TEST_DATABASE_URL` to a real PostgreSQL database instance before running the concurrency test suite:
+  ```bash
+  TEST_DATABASE_URL=postgresql://postgres@localhost:5432/boostx_test python -m pytest -v backend/tests/test_m5_concurrency.py
+  ```
+

@@ -1,8 +1,9 @@
 import os
+import sys
 from decimal import Decimal
 
 class Config:
-    TESTING = os.getenv("TESTING", "false").lower() in ("true", "1")
+    TESTING = os.getenv("TESTING", "false").lower() in ("true", "1") or "pytest" in sys.modules
     SECRET_KEY = os.getenv("SECRET_KEY", "boostx-secret-key-change-in-production")
     SQLALCHEMY_DATABASE_URI = os.getenv(
         "DATABASE_URL",

@@ -15,3 +15,19 @@ This document records every deviation from original prototype files, detailing t
 - **File**: `src/App.tsx`
 - **Type**: Hash routing parsing (`#/track`, `#/help`, `#/terms`, `#/privacy`, `#/refunds`, `#/cookies`, `#/security`, `#/disclaimer`, `#/404`), dynamic state wiring.
 - **Rationale**: Connects hardcoded prototype pages to real API responses and renders missing spec required screens (guest order tracking, FAQ, legal disclosures, 404) using existing CSS classes without altering `src/index.css` or visual styling.
+
+### DEV-003: Stale Payment Expiration Docstring Fix
+- **File**: `backend/app/workers/order_worker.py`
+- **Type**: Bugfix / Docstring Correction.
+- **Rationale**: `expire_payments()` docstring incorrectly stated a "20-minute" window, whereas `Payment.expires_at` models and worker logic use 30 minutes per spec §10. Corrected comment to 30 minutes.
+
+### DEV-004: Environment Variable Dual-Naming Harmonization
+- **File**: `backend/app/config.py`, `.env.example`, `backend/app/ai/payment_ai.py`
+- **Type**: Configuration Compatibility Fix.
+- **Rationale**: Code originally checked `AI_API_KEY` and `AI_MODEL`, while `.env.example` documented `OPENAI_API_KEY` and `OPENAI_VISION_MODEL`. Config was updated with fallbacks to seamlessly accept both naming conventions without breaking deployment configs.
+
+### DEV-005: Optional Figma Site Configuration Import Fallback
+- **File**: `frontend/vite.config.ts`
+- **Type**: Build System Fix.
+- **Rationale**: Prototype `vite.config.ts` statically imported `./.figma/make/site.json`, which was missing in clean checkouts. Added a safe `fs.existsSync()` check to gracefully fall back to an empty object `{}` when the file is absent.
+
