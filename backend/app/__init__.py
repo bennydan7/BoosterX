@@ -10,9 +10,9 @@ migrate = Migrate()
 
 def create_app(config_class=Config):
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    dist_path = os.path.join(repo_root, "dist")
+    dist_path = os.path.join(repo_root, "frontend", "dist")
     if not os.path.exists(dist_path):
-        dist_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dist")
+        dist_path = os.path.join(repo_root, "dist")
 
     app = Flask(
         __name__,
