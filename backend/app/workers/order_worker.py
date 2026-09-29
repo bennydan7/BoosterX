@@ -122,7 +122,7 @@ def _do_check_pending_orders() -> dict:
 
 def expire_payments(app=None) -> dict:
     """
-    Background worker: expires payments past their 20-minute window.
+    Background worker: expires payments past their 30-minute window.
     """
     if app:
         with app.app_context():

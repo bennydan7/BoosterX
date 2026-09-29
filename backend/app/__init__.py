@@ -33,6 +33,8 @@ def create_app(config_class=Config):
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    from backend.app.middleware import limiter
+    limiter.init_app(app)
     CORS(app, supports_credentials=True)
 
     # Ensure upload directory exists

@@ -1,8 +1,16 @@
 import secrets
 from functools import wraps
 from flask import request, jsonify, session, current_app
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from backend.app.auth.session import get_current_user
 from backend.app.models.user import UserRole
+
+limiter = Limiter(
+    key_func=get_remote_address,
+    default_limits=[],
+    storage_uri="memory://"
+)
 
 def get_csrf_token() -> str:
     if "csrf_token" not in session:

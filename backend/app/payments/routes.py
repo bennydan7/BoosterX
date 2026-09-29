@@ -8,10 +8,13 @@ from backend.app.payments.upload import validate_and_save_screenshot, UploadErro
 from backend.app.ai.payment_ai import PaymentAI
 from backend.app.payments.decision_engine import process_payment_verification
 
+from backend.app.middleware import limiter
+
 payments_bp = Blueprint("payments", __name__, url_prefix="/api/payments")
 
 
 @payments_bp.post("")
+@limiter.limit("10 per minute")
 def create_payment():
     data = request.get_json(silent=True) or {}
     amount_raw = data.get("amount_ghs") or data.get("amount")
@@ -67,6 +70,7 @@ def create_payment():
 
 
 @payments_bp.post("/<payment_id>/screenshot")
+@limiter.limit("10 per minute")
 def upload_screenshot(payment_id: str):
     payment = Payment.query.filter_by(payment_id=payment_id).first()
     if not payment:

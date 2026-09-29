@@ -7,8 +7,10 @@ from backend.app.orders.order_service import create_and_submit_order, refund_ord
 from backend.app.services.ledger_service import get_owner_balance
 from backend.app.providers.factory import get_provider_client
 from backend.app.providers.provider_client import ProviderError
+from backend.app.middleware import limiter
 
 orders_bp = Blueprint("orders", __name__, url_prefix="/api")
+
 
 def _resolve_caller_identity():
     user = get_current_user()
@@ -67,6 +69,7 @@ def _serialize_order(order: Order, include_events: bool = False) -> dict:
 
 
 @orders_bp.post("/orders")
+@limiter.limit("20 per minute")
 def create_order_endpoint():
     data = request.get_json(silent=True) or {}
     service_id = data.get("service_id")
@@ -113,6 +116,7 @@ def create_order_endpoint():
 
 
 @orders_bp.get("/orders/<public_id>")
+@limiter.limit("60 per minute")
 def get_order_detail(public_id: str):
     order = Order.query.filter_by(public_order_id=public_id).first()
     if not order:

@@ -4,7 +4,7 @@ from backend.app.models import User, UserRole, UserStatus
 from backend.app.auth.repository import SQLAlchemyUserRepository
 from backend.app.auth.auth_service import AuthService, AuthError
 from backend.app.auth.session import get_current_user, get_or_create_guest_session, generate_token
-from backend.app.middleware import get_csrf_token
+from backend.app.middleware import get_csrf_token, limiter
 from backend.app.orders.claim_service import ClaimService
 from backend.app.utils.phone import normalize_phone
 
@@ -39,6 +39,7 @@ def guest_session_endpoint():
 
 
 @auth_bp.post("/auth/register")
+@limiter.limit("5 per minute")
 def register():
     data = request.get_json(silent=True) or {}
     full_name = data.get("full_name")
@@ -86,6 +87,7 @@ def register():
 
 
 @auth_bp.post("/auth/login")
+@limiter.limit("5 per minute")
 def login():
     data = request.get_json(silent=True) or {}
     identifier = data.get("identifier", "")
