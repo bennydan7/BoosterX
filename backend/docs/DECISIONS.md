@@ -50,8 +50,8 @@ This document logs all key architectural, security, and design decisions made du
 - **Decision**: `create_app()` raises `RuntimeError` on boot in non-testing environments (`TESTING=False`) if `DATABASE_URL` is not a `postgresql://` connection string.
 - **Rationale**: Guarantees that production deployments never run on SQLite where money-safety row locks would no-op.
 
-### DEC-009: Repository Top-Level Restructuring (`frontend/` & `backend/`)
-- **Context**: Spec and prompt required clear separation of root-level frontend and backend concerns.
-- **Decision**: Moved `src/`, `public/`, `index.html`, `vite.config.ts`, `tsconfig.json`, `package.json`, `package-lock.json` into `frontend/` using `git mv`. Root directory retains `frontend/`, `backend/`, `docs/`, `Dockerfile`, `docker-compose.yml`, `render.yaml`, `README.md`, and `.gitignore`.
+### DEC-009: Strict Repository Top-Level Layout (`frontend/` & `backend/` Only)
+- **Context**: Spec and prompt required clear separation of root-level frontend and backend concerns. Loose directories (`docs/`, `scripts/`, `.figma/`, `.figaro/`) sat at top level.
+- **Decision**: Consolidated root directory using `git mv` so the top level contains strictly `frontend/` and `backend/` folders. Project documentation lives in `backend/docs/`, scripts in `backend/scripts/`, and Figma design assets in `frontend/.figma/`. Root level retains only root orchestration configs (`README.md`, `Dockerfile`, `docker-compose.yml`, `render.yaml`, `.env.example`, `.gitignore`).
 - **Rationale**: Organizes mono-repo clearly, preserves git history, and aligns build scripts and Docker container paths.
 

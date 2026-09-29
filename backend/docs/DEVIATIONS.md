@@ -31,3 +31,8 @@ This document records every deviation from original prototype files, detailing t
 - **Type**: Build System Fix.
 - **Rationale**: Prototype `vite.config.ts` statically imported `./.figma/make/site.json`, which was missing in clean checkouts. Added a safe `fs.existsSync()` check to gracefully fall back to an empty object `{}` when the file is absent.
 
+### DEV-006: Repository Structure Consolidation (`backend/` & `frontend/`)
+- **File**: `backend/docs/`, `backend/scripts/`, `frontend/.figma/`, `frontend/.figaro/`
+- **Type**: Directory Layout Consolidation.
+- **Rationale**: Consolidated root loose directories using `git mv` so repo root contains strictly `frontend/` and `backend/` directories, alongside root orchestration configs (`README.md`, `Dockerfile`, `docker-compose.yml`, `render.yaml`, `.env.example`, `.gitignore`). `.figma/` and `.figaro/` moved into `frontend/` with `frontend/vite.config.ts` updated to load `frontend/.figma/make/site.json` directly.
+

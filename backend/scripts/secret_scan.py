@@ -18,7 +18,7 @@ LEAK_PATTERNS = [
 def scan_diff():
     print("=== Running BoostX Secret Leak Scan ===")
     try:
-        diff_output = subprocess.check_output(["git", "diff", "HEAD~5"], text=True, errors="ignore")
+        diff_output = subprocess.check_output(["git", "diff", "HEAD"], text=True, errors="ignore")
     except Exception:
         diff_output = ""
 

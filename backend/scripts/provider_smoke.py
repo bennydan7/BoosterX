@@ -3,7 +3,7 @@
 Provider Smoke Test Script for BoostX.
 
 Usage:
-  python scripts/provider_smoke.py [--url API_URL] [--key API_KEY]
+  python backend/scripts/provider_smoke.py [--url API_URL] [--key API_KEY]
 
 Tests:
   1. Ping / balance check
@@ -16,7 +16,7 @@ import sys
 import argparse
 import logging
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("provider_smoke")

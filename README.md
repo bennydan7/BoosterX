@@ -40,8 +40,9 @@ BoosterX/
 │   ├── src/                # Typed REST API client, router, & screens
 │   ├── package.json        # Frontend scripts & dependencies
 │   └── vite.config.ts      # Vite config, outDir, & API proxy
-├── docs/                   # Implementation plan, runbook, decisions & deviations
-├── scripts/                # Provider smoke test CLI & secret scan script
+├── backend/
+│   ├── docs/               # Implementation plan, runbook, decisions & deviations
+│   └── scripts/            # Provider smoke test CLI & secret scan script
 ├── Dockerfile              # Multi-stage production build (Node + Python + Gunicorn)
 ├── docker-compose.yml      # Container orchestration (Web, Worker, Postgres, Redis)
 └── render.yaml             # Render deployment blueprint
@@ -95,12 +96,12 @@ TESTING=true python -m pytest -v backend/tests
 
 Run the provider smoke test CLI:
 ```bash
-python scripts/provider_smoke.py --mode fake
+python backend/scripts/provider_smoke.py --mode fake
 ```
 
 Run secret leak build-scan:
 ```bash
-python scripts/secret_scan.py
+python backend/scripts/secret_scan.py
 ```
 
 ---

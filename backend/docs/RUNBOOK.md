@@ -48,7 +48,7 @@ If the provider API key is compromised or needs scheduled rotation:
    ```
 3. Run provider smoke test to verify connectivity:
    ```bash
-   python scripts/provider_smoke.py --url https://boostcenter2.com/api/v2 --key new_provider_key_here --mode live
+   python backend/scripts/provider_smoke.py --url https://boostcenter2.com/api/v2 --key new_provider_key_here --mode live
    ```
 4. Restart web and worker containers.
 

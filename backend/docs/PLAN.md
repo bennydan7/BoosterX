@@ -81,5 +81,5 @@ This document maps every section of the BoostX MVP Build Specification (`src/imp
 - **Spec Section**: §14 Security, §17 Test Plan, §18 Environment & Config, Prompt §10, §11, §12
 - **Implementation Files**:
   - `backend/tests/`: Pytest suite (concurrency lock tests, screenshot verification tests, idempotency, refund math, status mapping, security tests).
-  - `scripts/provider_smoke.py`: Provider smoke test CLI tool.
+  - `backend/scripts/provider_smoke.py`: Provider smoke test CLI tool.
   - `docs/DECISIONS.md`, `docs/DEVIATIONS.md`, `docs/RUNBOOK.md`, `README.md`.

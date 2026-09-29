@@ -7,12 +7,9 @@ import fs from 'node:fs'
 
 // Optional Figma site config
 let siteConfiguration = {}
-const figmaSiteConfigPath = path.resolve(__dirname, '../.figma/make/site.json')
 const localSiteConfigPath = path.resolve(__dirname, './.figma/make/site.json')
 if (fs.existsSync(localSiteConfigPath)) {
   try { siteConfiguration = JSON.parse(fs.readFileSync(localSiteConfigPath, 'utf-8')) } catch {}
-} else if (fs.existsSync(figmaSiteConfigPath)) {
-  try { siteConfiguration = JSON.parse(fs.readFileSync(figmaSiteConfigPath, 'utf-8')) } catch {}
 }
 
 
