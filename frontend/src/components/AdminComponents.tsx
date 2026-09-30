@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import type { AdminOverviewStats, AdminAuditLogItem } from "../api/types";
+import { Button, Card, Field, Icon, PageTitle, Status, type IconName } from "../App";
 
 export function AdminDashboard({ go }: { go: (page: string) => void }) {
   const [overview, setOverview] = useState<AdminOverviewStats | null>(null);
@@ -11,42 +12,43 @@ export function AdminDashboard({ go }: { go: (page: string) => void }) {
 
   return (
     <div className="admin-page">
-      <div className="page-title">
-        <div>
-          <h1>Admin Overview</h1>
-          <p>Live platform performance and operational health.</p>
-        </div>
-      </div>
+      <PageTitle title="Admin Overview" description="Live platform performance and operational health." />
 
       <div className="stats admin-stats">
         {[
-          ["24h Revenue", `GHS ${overview?.revenue_24h_ghs || "0.00"}`],
-          ["Active Orders", (overview?.active_orders || 0).toString()],
-          ["Pending Payment Reviews", (overview?.pending_payment_reviews || 0).toString()],
-          ["Total Registered Users", (overview?.total_users || 0).toString()],
-          ["Failed Orders", (overview?.failed_orders || 0).toString()],
-          ["Total System Orders", (overview?.total_orders || 0).toString()],
-          ["Provider Balance", overview?.provider_balance || "Loading..."]
-        ].map(([label, val]) => (
-          <section className="card stat" key={label}>
-            <div className="stat-head"><span>{label}</span></div>
+          ["24h Revenue", `GHS ${overview?.revenue_24h_ghs || "0.00"}`, "wallet"],
+          ["Active Orders", (overview?.active_orders || 0).toString(), "orders"],
+          ["Pending Payment Reviews", (overview?.pending_payment_reviews || 0).toString(), "card"],
+          ["Total Registered Users", (overview?.total_users || 0).toString(), "users"],
+          ["Failed Orders", (overview?.failed_orders || 0).toString(), "close"],
+          ["Total System Orders", (overview?.total_orders || 0).toString(), "chart"],
+          ["Provider Balance", overview?.provider_balance || "Loading...", "wallet"]
+        ].map(([label, val, icon]) => (
+          <Card className="stat" key={label}>
+            <div className="stat-head">
+              <span>{label}</span>
+              <div className="icon-tile"><Icon name={icon as IconName} /></div>
+            </div>
             <strong>{val}</strong>
             <small>Updated live</small>
-          </section>
+          </Card>
         ))}
       </div>
 
-      <div style={{ marginTop: "1.5rem" }}>
-        <section className="card">
-          <h2>Quick Actions</h2>
-          <div style={{ display: "flex", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
-            <button className="btn primary" onClick={() => go("admin-payments")}>Review Payments ({overview?.pending_payment_reviews || 0})</button>
-            <button className="btn secondary" onClick={() => go("admin-orders")}>Manage Orders ({overview?.active_orders || 0} active)</button>
-            <button className="btn secondary" onClick={() => go("admin-services")}>Service Catalog</button>
-            <button className="btn secondary" onClick={() => go("admin-audit")}>Audit Logs</button>
+      <Card>
+        <div className="card-head">
+          <div>
+            <span className="eyebrow">Control Center</span>
+            <h2>Quick Actions</h2>
           </div>
-        </section>
-      </div>
+        </div>
+        <div className="admin-order-actions">
+          <Button variant="primary" icon="card" onClick={() => go("admin-payments")}>Review Payments ({overview?.pending_payment_reviews || 0})</Button>
+          <Button variant="secondary" icon="orders" onClick={() => go("admin-orders")}>Manage Orders ({overview?.active_orders || 0} active)</Button>
+          <Button variant="secondary" icon="services" onClick={() => go("admin-services")}>Service Catalog</Button>
+          <Button variant="secondary" icon="clock" onClick={() => go("admin-audit")}>Audit Logs</Button>
+        </div>
+      </Card>
     </div>
   );
 }
@@ -64,14 +66,9 @@ export function AdminPayments({ go }: { go: (page: string) => void }) {
 
   return (
     <div className="admin-page">
-      <div className="page-title">
-        <div>
-          <h1>Payment Reviews</h1>
-          <p>Review AI-verified payments and resolve exceptions.</p>
-        </div>
-      </div>
+      <PageTitle title="Payment Reviews" description="Review AI-verified payments and resolve exceptions." />
 
-      <section className="card">
+      <Card>
         {loading ? <p>Loading payments...</p> : (
           <div className="table-wrap">
             <table>
@@ -92,13 +89,13 @@ export function AdminPayments({ go }: { go: (page: string) => void }) {
                     <td><strong>{p.payment_id}</strong></td>
                     <td>GHS {p.amount_ghs}</td>
                     <td>{p.network}</td>
-                    <td><span className={`status ${p.status.toLowerCase()}`}>{p.status}</span></td>
+                    <td><Status>{p.status}</Status></td>
                     <td>{p.reference || "N/A"}</td>
                     <td>{new Date(p.created_at).toLocaleString()}</td>
                     <td>
-                      <button className="btn secondary" onClick={() => go(`admin-payment-review?id=${p.payment_id}`)}>
+                      <Button variant="secondary" icon="eye" onClick={() => go(`admin-payment-review?id=${p.payment_id}`)}>
                         Review
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -106,7 +103,7 @@ export function AdminPayments({ go }: { go: (page: string) => void }) {
             </table>
           </div>
         )}
-      </section>
+      </Card>
     </div>
   );
 }
@@ -147,21 +144,19 @@ export function AdminPaymentReview({ go }: { go: (page: string) => void }) {
     }
   };
 
-  if (!payment) return <section className="card"><p>Loading payment details...</p></section>;
+  if (!payment) return <Card><p>Loading payment details...</p></Card>;
 
   return (
     <div className="admin-page">
-      <button className="back-link" onClick={() => go("admin-payments")}>← Back to payments</button>
-      <div className="page-title">
-        <div>
-          <h1>Review Payment {payment.payment_id}</h1>
-          <p>Amount: GHS {payment.amount_ghs} · Network: {payment.network}</p>
-        </div>
-        <span className={`status ${payment.status.toLowerCase()}`}>{payment.status}</span>
-      </div>
+      <Button variant="ghost" icon="arrow" onClick={() => go("admin-payments")}>Back to payments</Button>
+      <PageTitle
+        title={`Review Payment ${payment.payment_id}`}
+        description={`Amount: GHS ${payment.amount_ghs} · Network: ${payment.network}`}
+        action={<Status>{payment.status}</Status>}
+      />
 
       <div className="payment-review-grid">
-        <section className="card">
+        <Card>
           <h2>Payment Details</h2>
           <dl className="detail-list">
             <div><dt>Payment ID</dt><dd>{payment.payment_id}</dd></div>
@@ -169,26 +164,20 @@ export function AdminPaymentReview({ go }: { go: (page: string) => void }) {
             <div><dt>Detected Amount</dt><dd>{payment.detected_amount_ghs ? `GHS ${payment.detected_amount_ghs}` : "N/A"}</dd></div>
             <div><dt>Network</dt><dd>{payment.network}</dd></div>
             <div><dt>Reference</dt><dd>{payment.reference || "N/A"}</dd></div>
-            <div><dt>Status</dt><dd>{payment.status}</dd></div>
+            <div><dt>Status</dt><dd><Status>{payment.status}</Status></dd></div>
           </dl>
-        </section>
+        </Card>
 
-        <section className="card">
+        <Card>
           <h2>Admin Decision</h2>
-          <label className="field">
-            <span>Override Reference (optional)</span>
-            <input value={reference} onChange={(e) => setReference(e.target.value)} placeholder="MANUAL-REF-123" />
-          </label>
-          <label className="field">
-            <span>Rejection Reason (optional)</span>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Unclear screenshot" />
-          </label>
-          {msg && <div className="payment-warning" style={{ margin: "1rem 0" }}><strong>{msg}</strong></div>}
-          <div style={{ display: "flex", gap: "1rem", marginTop: "1rem" }}>
-            <button className="btn primary" onClick={handleApprove}>Approve & Credit</button>
-            <button className="btn secondary" onClick={handleReject}>Reject Payment</button>
+          <Field label="Override Reference (optional)" value={reference} onChange={setReference} placeholder="MANUAL-REF-123" />
+          <Field label="Rejection Reason (optional)" value={reason} onChange={setReason} placeholder="Unclear screenshot" />
+          {msg && <div className="payment-warning"><strong>{msg}</strong></div>}
+          <div className="admin-order-actions">
+            <Button variant="primary" icon="check" onClick={handleApprove}>Approve & Credit</Button>
+            <Button variant="secondary" icon="close" onClick={handleReject}>Reject Payment</Button>
           </div>
-        </section>
+        </Card>
       </div>
     </div>
   );
@@ -213,14 +202,9 @@ export function AdminOrders() {
 
   return (
     <div className="admin-page">
-      <div className="page-title">
-        <div>
-          <h1>Order Management</h1>
-          <p>Track fulfillment status and resolve order issues.</p>
-        </div>
-      </div>
+      <PageTitle title="Order Management" description="Track fulfillment status and resolve order issues." />
 
-      <section className="card">
+      <Card>
         <div className="table-wrap">
           <table>
             <thead>
@@ -241,13 +225,13 @@ export function AdminOrders() {
                   <td>{o.platform}</td>
                   <td>{o.service_name}</td>
                   <td>{o.target}</td>
-                  <td><span className={`status ${o.status.toLowerCase()}`}>{o.status}</span></td>
-                  <td>{o.needs_attention ? <span className="status rejected">Needs Attention</span> : "Normal"}</td>
+                  <td><Status>{o.status}</Status></td>
+                  <td>{o.needs_attention ? <Status>Rejected</Status> : "Normal"}</td>
                   <td>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
-                      {o.needs_attention && <button className="btn secondary" onClick={() => handleAction(o.public_order_id, "clear-attention")}>Clear Flag</button>}
-                      <button className="btn secondary" onClick={() => handleAction(o.public_order_id, "mark-submitted")}>Mark Submitted</button>
-                      <button className="btn ghost" onClick={() => handleAction(o.public_order_id, "cancel")}>Cancel</button>
+                    <div className="admin-order-actions">
+                      {o.needs_attention && <Button variant="secondary" icon="check" onClick={() => handleAction(o.public_order_id, "clear-attention")}>Clear Flag</Button>}
+                      <Button variant="secondary" icon="plus" onClick={() => handleAction(o.public_order_id, "mark-submitted")}>Mark Submitted</Button>
+                      <Button variant="ghost" icon="close" onClick={() => handleAction(o.public_order_id, "cancel")}>Cancel</Button>
                     </div>
                   </td>
                 </tr>
@@ -255,7 +239,7 @@ export function AdminOrders() {
             </tbody>
           </table>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -290,15 +274,13 @@ export function AdminServices() {
 
   return (
     <div className="admin-page">
-      <div className="page-title">
-        <div>
-          <h1>Services Catalog</h1>
-          <p>Control service availability and provider rates.</p>
-        </div>
-        <button className="btn primary" onClick={handleSync}>Sync Catalog with Provider</button>
-      </div>
+      <PageTitle
+        title="Services Catalog"
+        description="Control service availability and provider rates."
+        action={<Button variant="primary" icon="transactions" onClick={handleSync}>Sync Catalog with Provider</Button>}
+      />
 
-      <section className="card">
+      <Card>
         <div className="table-wrap">
           <table>
             <thead>
@@ -322,18 +304,18 @@ export function AdminServices() {
                   <td>${s.rate_usd_per_1000}</td>
                   <td>{s.min_qty} / {s.max_qty.toLocaleString()}</td>
                   <td>{s.refill_available ? "Yes" : "No"}</td>
-                  <td><span className={`status ${s.enabled ? "completed" : "cancelled"}`}>{s.enabled ? "Active" : "Disabled"}</span></td>
+                  <td><Status>{s.enabled ? "Completed" : "Cancelled"}</Status></td>
                   <td>
-                    <button className="btn secondary" onClick={() => toggleService(s.id, s.enabled)}>
+                    <Button variant="secondary" onClick={() => toggleService(s.id, s.enabled)}>
                       {s.enabled ? "Disable" : "Enable"}
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </section>
+      </Card>
     </div>
   );
 }
@@ -357,22 +339,19 @@ export function AdminPlatforms() {
 
   return (
     <div className="admin-page">
-      <div className="page-title">
-        <div>
-          <h1>Platforms</h1>
-          <p>Manage active social platforms on BoostX.</p>
-        </div>
-      </div>
+      <PageTitle title="Platforms" description="Manage active social platforms on BoostX." />
 
       <div className="platform-admin-grid">
         {platforms.map(p => (
-          <section className="card" key={p.id}>
+          <Card key={p.id}>
             <h2>{p.name}</h2>
-            <p>Status: <span className={`status ${p.active ? "completed" : "cancelled"}`}>{p.active ? "Active" : "Disabled"}</span></p>
-            <button className="btn secondary" style={{ marginTop: "1rem" }} onClick={() => togglePlatform(p.id, p.active)}>
-              {p.active ? "Disable Platform" : "Enable Platform"}
-            </button>
-          </section>
+            <p>Status: <Status>{p.active ? "Completed" : "Cancelled"}</Status></p>
+            <div className="admin-order-actions">
+              <Button variant="secondary" onClick={() => togglePlatform(p.id, p.active)}>
+                {p.active ? "Disable Platform" : "Enable Platform"}
+              </Button>
+            </div>
+          </Card>
         ))}
       </div>
     </div>
@@ -411,14 +390,9 @@ export function AdminConfigPage({ type }: { type: string }) {
   if (type === "audit") {
     return (
       <div className="admin-page">
-        <div className="page-title">
-          <div>
-            <h1>Audit Logs</h1>
-            <p>Immutable record of administrator actions.</p>
-          </div>
-        </div>
+        <PageTitle title="Audit Logs" description="Immutable record of administrator actions." />
 
-        <section className="card">
+        <Card>
           <div className="table-wrap">
             <table>
               <thead>
@@ -447,7 +421,7 @@ export function AdminConfigPage({ type }: { type: string }) {
               </tbody>
             </table>
           </div>
-        </section>
+        </Card>
       </div>
     );
   }
@@ -455,21 +429,16 @@ export function AdminConfigPage({ type }: { type: string }) {
   if (type === "health") {
     return (
       <div className="admin-page">
-        <div className="page-title">
-          <div>
-            <h1>System Health</h1>
-            <p>Live status of database and provider services.</p>
-          </div>
-        </div>
+        <PageTitle title="System Health" description="Live status of database and provider services." />
 
-        <section className="card">
-          <h2>Overall Status: {health?.status || "Checking..."}</h2>
-          <dl className="detail-list" style={{ marginTop: "1rem" }}>
-            <div><dt>Database</dt><dd>{health?.database?.status === "ok" ? "OK" : "ERROR"}</dd></div>
-            <div><dt>Provider API</dt><dd>{health?.provider?.status === "ok" ? "OK" : "ERROR"}</dd></div>
+        <Card>
+          <h2>Overall Status: <Status>{health?.status === "ok" ? "Completed" : "Cancelled"}</Status></h2>
+          <dl className="detail-list">
+            <div><dt>Database</dt><dd><Status>{health?.database?.status === "ok" ? "Completed" : "Cancelled"}</Status></dd></div>
+            <div><dt>Provider API</dt><dd><Status>{health?.provider?.status === "ok" ? "Completed" : "Cancelled"}</Status></dd></div>
             <div><dt>Timestamp</dt><dd>{health?.timestamp ? new Date(health.timestamp).toLocaleString() : "N/A"}</dd></div>
           </dl>
-        </section>
+        </Card>
       </div>
     );
   }
@@ -477,42 +446,28 @@ export function AdminConfigPage({ type }: { type: string }) {
   if (type === "pricing") {
     return (
       <div className="admin-page">
-        <div className="page-title">
-          <div>
-            <h1>Pricing Configuration</h1>
-            <p>Set exchange rates and flat markups for customer prices.</p>
-          </div>
-        </div>
+        <PageTitle title="Pricing Configuration" description="Set exchange rates and flat markups for customer prices." />
 
-        <section className="card">
-          <label className="field">
-            <span>USD to GHS Exchange Rate</span>
-            <input value={rate} onChange={(e) => setRate(e.target.value)} placeholder="10.70" />
-          </label>
-          <label className="field">
-            <span>Flat Processing Fee Markup (GHS)</span>
-            <input value={markup} onChange={(e) => setMarkup(e.target.value)} placeholder="5.00" />
-          </label>
-          {msg && <div className="payment-warning" style={{ margin: "1rem 0" }}><strong>{msg}</strong></div>}
-          <button className="btn primary" onClick={handleUpdatePricing} style={{ marginTop: "1rem" }}>
-            Save Pricing Settings
-          </button>
-        </section>
+        <Card className="admin-settings-card">
+          <Field label="USD to GHS Exchange Rate" value={rate} onChange={setRate} placeholder="10.70" />
+          <Field label="Flat Processing Fee Markup (GHS)" value={markup} onChange={setMarkup} placeholder="5.00" />
+          {msg && <div className="payment-warning"><strong>{msg}</strong></div>}
+          <div className="admin-order-actions">
+            <Button variant="primary" icon="check" onClick={handleUpdatePricing}>
+              Save Pricing Settings
+            </Button>
+          </div>
+        </Card>
       </div>
     );
   }
 
   return (
     <div className="admin-page">
-      <div className="page-title">
-        <div>
-          <h1>Admin Settings ({type})</h1>
-          <p>System configuration panel.</p>
-        </div>
-      </div>
-      <section className="card">
+      <PageTitle title={`Admin Settings (${type})`} description="System configuration panel." />
+      <Card>
         <p>Admin configuration page for {type}.</p>
-      </section>
+      </Card>
     </div>
   );
 }

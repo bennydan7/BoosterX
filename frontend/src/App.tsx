@@ -41,36 +41,38 @@ const paths: Record<IconName, ReactNode> = {
   shield: <><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/><path d="m9 12 2 2 4-4"/></>,
 };
 
-function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
+export type { IconName };
+
+export function Icon({ name, size = 18 }: { name: IconName; size?: number }) {
   return <svg className="icon" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
-function SocialIcon({ platform }: { platform: string }) {
+export function SocialIcon({ platform }: { platform: string }) {
   const filename = platform.toLowerCase();
   return <span className="platform-mark"><img src={`/social/${filename}.svg`} alt="" /></span>;
 }
 
-function Button({ children, variant = "primary", icon, onClick, type = "button", disabled, full }: { children: ReactNode; variant?: "primary" | "secondary" | "ghost"; icon?: IconName; onClick?: () => void; type?: "button" | "submit"; disabled?: boolean; full?: boolean }) {
+export function Button({ children, variant = "primary", icon, onClick, type = "button", disabled, full }: { children: ReactNode; variant?: "primary" | "secondary" | "ghost"; icon?: IconName; onClick?: () => void; type?: "button" | "submit"; disabled?: boolean; full?: boolean }) {
   return <button type={type} disabled={disabled} onClick={onClick} className={`btn ${variant} ${full ? "full" : ""}`}>{icon && <Icon name={icon} />}{children}</button>;
 }
 
-function Field({ label, placeholder, value, type = "text", onChange }: { label?: string; placeholder?: string; value?: string; type?: string; onChange?: (value: string) => void }) {
+export function Field({ label, placeholder, value, type = "text", onChange }: { label?: string; placeholder?: string; value?: string; type?: string; onChange?: (value: string) => void }) {
   return <label className="field">{label && <span>{label}</span>}<input type={type} placeholder={placeholder} value={value || ""} onChange={(e) => onChange?.(e.target.value)} /></label>;
 }
 
-function SelectField({ label, value, children, onChange }: { label?: string; value?: string; children: ReactNode; onChange?: (value: string) => void }) {
+export function SelectField({ label, value, children, onChange }: { label?: string; value?: string; children: ReactNode; onChange?: (value: string) => void }) {
   return <label className="field">{label && <span>{label}</span>}<select value={value} onChange={(e) => onChange?.(e.target.value)}>{children}</select></label>;
 }
 
-function PageTitle({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
+export function PageTitle({ title, description, action }: { title: string; description?: string; action?: ReactNode }) {
   return <div className="page-title"><div><h1>{title}</h1>{description && <p>{description}</p>}</div>{action}</div>;
 }
 
-function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
   return <section className={`card ${className}`}>{children}</section>;
 }
 
-function Status({ children }: { children: ReactNode }) { return <span className={`status ${String(children).toLowerCase()}`}>{children}</span>; }
+export function Status({ children }: { children: ReactNode }) { return <span className={`status ${String(children).toLowerCase()}`}>{children}</span>; }
 
 const navGroups = [
   { label: "Main", links: [["dashboard", "Dashboard", "home"], ["new-order", "New Order", "plus"], ["orders", "My Orders", "orders"], ["services", "Services", "services"]] },
@@ -383,6 +385,12 @@ function Auth({ mode, go }: { mode: "login" | "register"; go: (page: string) => 
   </div>;
 }
 
+const adminNavGroups = [
+  { label: "Admin Core", links: [["admin", "Overview", "chart"], ["admin-payments", "Payments", "card"], ["admin-orders", "Orders", "orders"], ["admin-services", "Services", "services"], ["admin-platforms", "Platforms", "shield"]] },
+  { label: "System Config", links: [["admin-pricing", "Pricing", "wallet"], ["admin-health", "System Health", "shield"], ["admin-audit", "Audit Logs", "clock"]] },
+  { label: "Storefront", links: [["dashboard", "Main Storefront", "home"]] },
+] as const;
+
 function Shell({ page, go, children, dark, setDark, user }: { page: string; go: (page: string) => void; children: ReactNode; dark: boolean; setDark: (v: boolean) => void; user: UserInfo | null }) {
   const [open, setOpen] = useState(false);
   const handleLogout = async () => {
@@ -390,7 +398,9 @@ function Shell({ page, go, children, dark, setDark, user }: { page: string; go: 
     go("login");
   };
 
-  return <div className="app-shell"><aside className={open ? "open" : ""}><div className="sidebar-logo"><img src={logo} alt="BoostX"/><button onClick={() => setOpen(false)}><Icon name="close"/></button></div><nav>{navGroups.map(g => <div className="nav-group" key={g.label}><span>{g.label}</span>{g.links.map(([id,label,icon]) => <button className={page === id ? "active" : ""} onClick={() => { go(id); setOpen(false); }} key={id}><Icon name={icon as IconName}/>{label}</button>)}</div>)}</nav><div className="sidebar-bottom"><button onClick={() => setDark(!dark)}><Icon name={dark ? "sun" : "moon"}/>{dark ? "Light mode" : "Dark mode"}</button>{user?.authenticated && <button onClick={handleLogout}><Icon name="logout"/>Log out</button>}</div></aside>{open && <button className="drawer-backdrop" onClick={() => setOpen(false)} aria-label="Close menu"/>}
+  const activeGroups = page.startsWith("admin") ? adminNavGroups : navGroups;
+
+  return <div className="app-shell" data-admin={page.startsWith("admin") ? "true" : undefined}><aside className={open ? "open" : ""}><div className="sidebar-logo"><img src={logo} alt="BoostX"/><button onClick={() => setOpen(false)}><Icon name="close"/></button></div><nav>{activeGroups.map(g => <div className="nav-group" key={g.label}><span>{g.label}</span>{g.links.map(([id,label,icon]) => <button className={page === id ? "active" : ""} onClick={() => { go(id); setOpen(false); }} key={id}><Icon name={icon as IconName}/>{label}</button>)}</div>)}</nav><div className="sidebar-bottom"><button onClick={() => setDark(!dark)}><Icon name={dark ? "sun" : "moon"}/>{dark ? "Light mode" : "Dark mode"}</button>{user?.authenticated && <button onClick={handleLogout}><Icon name="logout"/>Log out</button>}</div></aside>{open && <button className="drawer-backdrop" onClick={() => setOpen(false)} aria-label="Close menu"/>}
     <div className="main"><header><button className="mobile-menu" onClick={() => setOpen(true)}><Icon name="menu"/></button><div className="top-search"><Icon name="search"/><input placeholder="Search orders, services..."/></div><div className="top-actions"><button className="user-menu" onClick={() => go(user?.authenticated ? "profile" : "login")}><span className="avatar">{user?.full_name ? user.full_name.substring(0, 2).toUpperCase() : "BX"}</span><span><strong>{user?.full_name || "Guest"}</strong><small>{user?.role || "Customer"}</small></span></button></div></header><main>{children}</main></div>
   </div>;
 }
@@ -458,8 +468,10 @@ export default function App() {
 
   if (page === "login" || page === "register") return <Auth mode={page} go={go}/>;
 
+  let content: ReactNode = screen;
+
   if (page.startsWith("admin")) {
-    return (
+    content = (
       <Suspense fallback={<Card><p>Loading admin panel...</p></Card>}>
         {page === "admin" && <AdminDashboard go={go} />}
         {page === "admin-payments" && <AdminPayments go={go} />}
@@ -474,5 +486,5 @@ export default function App() {
     );
   }
 
-  return <Shell page={page} go={go} dark={dark} setDark={setDark} user={user}>{screen}</Shell>;
+  return <Shell page={page} go={go} dark={dark} setDark={setDark} user={user}>{content}</Shell>;
 }

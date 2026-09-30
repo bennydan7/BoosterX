@@ -31,8 +31,15 @@ This document records every deviation from original prototype files, detailing t
 - **Type**: Build System Fix.
 - **Rationale**: Prototype `vite.config.ts` statically imported `./.figma/make/site.json`, which was missing in clean checkouts. Added a safe `fs.existsSync()` check to gracefully fall back to an empty object `{}` when the file is absent.
 
-### DEV-006: Repository Structure Consolidation (`backend/` & `frontend/`)
-- **File**: `backend/docs/`, `backend/scripts/`, `frontend/.figma/`, `frontend/.figaro/`
-- **Type**: Directory Layout Consolidation.
-- **Rationale**: Consolidated root loose directories using `git mv` so repo root contains strictly `frontend/` and `backend/` directories, alongside root orchestration configs (`README.md`, `Dockerfile`, `docker-compose.yml`, `render.yaml`, `.env.example`, `.gitignore`). `.figma/` and `.figaro/` moved into `frontend/` with `frontend/vite.config.ts` updated to load `frontend/.figma/make/site.json` directly.
+### DEV-007: Admin Dashboard Design System Alignment Audit & Refactoring
+- **File**: `frontend/src/components/AdminComponents.tsx`, `frontend/src/App.tsx`
+- **Type**: Component Architecture & Design System Alignment.
+- **Audit Findings**:
+  - **Overview**: Used raw `<div style={{ marginTop: "1.5rem" }}>`, inline flex containers, and raw `<button className="btn">` elements instead of shared `<PageTitle>`, `<Card>`, `<Icon>`, and `<Button>` components.
+  - **Payments & Payment Review**: Used raw `<input>` inside raw `<label className="field">`, raw `<button className="back-link">`, and inline margins/flex styles instead of `<Field>`, `<Button variant="ghost">`, `<Button variant="primary">`, and `<Status>`.
+  - **Orders, Services, Platforms**: Used raw HTML buttons, inline flex containers (`display: "flex", gap: "0.5rem"`), and raw text statuses instead of `<Status>`, `<Button>`, and `.admin-order-actions` layout containers.
+  - **Settings, Health, Audit**: Used raw `<dl>`, raw `<input>`, and inline margin styles instead of shared `<PageTitle>`, `<Card>`, `<Field>`, `<Status>`, and `<Button>` components.
+  - **Shell Integration**: Admin screens previously bypassed `<Shell>`, missing sidebar navigation, top header, font inheritance, and shared layout scale. Wrapped admin screens in `<Shell>` with `adminNavGroups` so admin inherits the unified layout, font family, typography scale, icon set, and sidebar navigation while preserving the denser graphite internal-tool color palette.
+- **Resolution**: Refactored all 8 admin screens (`AdminDashboard`, `AdminPayments`, `AdminPaymentReview`, `AdminOrders`, `AdminServices`, `AdminPlatforms`, `AdminConfigPage` audit/health/pricing) to consume shared UI primitives (`Card`, `Button`, `Field`, `PageTitle`, `Status`, `Icon`) and wrapped admin routes inside `<Shell>`.
+
 
