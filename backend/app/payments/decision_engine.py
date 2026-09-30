@@ -1,12 +1,54 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from decimal import Decimal
 import json
+import re
 from flask import current_app
 from backend.app.db import db
 from backend.app.models import Payment, PaymentStatus, PaymentVerification, LedgerTransaction, LedgerStatus, LedgerType, Setting, User, GuestSession, Notification
 from backend.app.ai.payment_ai import PaymentAIExtraction
 from backend.app.utils.phone import normalize_phone
 from backend.app.services.ledger_service import get_owner_balance
+
+
+def _validate_reference_format(ref: str, network: str = None) -> bool:
+    if not ref or len(ref) < 6 or len(ref) > 30:
+        return False
+    if not re.match(r'^[A-Za-z0-9\-_]+$', ref):
+        return False
+    net_lower = (network or "").lower()
+    if "telecel" in net_lower:
+        if not re.match(r'^(TX|tx)?[A-Za-z0-9]{6,24}$', ref):
+            return False
+    elif "mtn" in net_lower or "airtel" in net_lower or "tigo" in net_lower:
+        if not re.match(r'^[A-Za-z0-9]{6,24}$', ref):
+            return False
+    return True
+
+
+def _parse_screenshot_datetime(dt_str: str):
+    if not dt_str:
+        return None
+    formats = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%dT%H:%M:%S",
+        "%d/%m/%Y %H:%M:%S",
+        "%d/%m/%Y %H:%M",
+        "%Y/%m/%d %H:%M:%S",
+        "%Y/%m/%d %H:%M",
+    ]
+    clean_str = dt_str.strip()
+    for fmt in formats:
+        try:
+            return datetime.strptime(clean_str, fmt)
+        except ValueError:
+            continue
+    try:
+        from dateutil import parser
+        return parser.parse(clean_str).replace(tzinfo=None)
+    except Exception:
+        return None
+
 
 def process_payment_verification(payment: Payment, ai_result: PaymentAIExtraction, admin_override_action: str = None) -> str:
     """
@@ -71,17 +113,37 @@ def process_payment_verification(payment: Payment, ai_result: PaymentAIExtractio
     else:
         failed_checks.append("status_unsuccessful")
 
-    # Check Reference Uniqueness
+    # Check Reference Uniqueness & Format
     ref = (ai_result.reference or "").strip()
     if not ref:
         failed_checks.append("missing_reference")
     else:
-        existing_tx = LedgerTransaction.query.filter_by(reference=ref, type=LedgerType.PAYMENT_CREDIT).first()
-        if existing_tx:
-            failed_checks.append("duplicate_reference")
-            payment.rejection_reason = "Transaction already used."
+        if not _validate_reference_format(ref, payment.network):
+            failed_checks.append("invalid_reference_format")
+            payment.rejection_reason = "Transaction reference format is invalid for selected network."
         else:
-            passed_checks.append("reference_unique")
+            existing_tx = LedgerTransaction.query.filter_by(reference=ref, type=LedgerType.PAYMENT_CREDIT).first()
+            if existing_tx:
+                failed_checks.append("duplicate_reference")
+                payment.rejection_reason = "Transaction already used."
+            else:
+                passed_checks.append("reference_unique")
+
+    # Check Screenshot Datetime Window
+    if ai_result.datetime:
+        parsed_dt = _parse_screenshot_datetime(ai_result.datetime)
+        if parsed_dt:
+            payment_created = payment.created_at.replace(tzinfo=None) if payment.created_at and payment.created_at.tzinfo is not None else (payment.created_at or now_utc)
+            payment_expires_dt = payment_expires or (payment_created + timedelta(minutes=30))
+            
+            min_allowed = payment_created - timedelta(minutes=15)
+            max_allowed = payment_expires_dt + timedelta(minutes=5)
+
+            if parsed_dt < min_allowed or parsed_dt > max_allowed:
+                failed_checks.append("expired_screenshot_timestamp")
+                payment.rejection_reason = "Screenshot timestamp is outside the valid payment window."
+            else:
+                passed_checks.append("timestamp_valid")
 
     # Check Amount
     detected_amt = Decimal(str(ai_result.amount or 0.0))
@@ -99,13 +161,26 @@ def process_payment_verification(payment: Payment, ai_result: PaymentAIExtractio
     elif detected_amt > expected_amt:
         failed_checks.append("amount_overpaid")
 
-    # Check AI Confidence & Integrity Flags
-    if ai_result.confidence < 0.85 or ("low_confidence" in ai_result.integrity_flags):
-        failed_checks.append("low_confidence")
+    # Check AI Confidence & Integrity Flags (Doctored / Manipulated Screenshots)
+    flags_lower = [f.lower() for f in (ai_result.integrity_flags or [])]
+    has_doctored_flag = any(any(kw in flag for kw in ("doctored", "manipulated", "edited", "reused", "tampered", "fake")) for flag in flags_lower)
 
-    # Decision Matrix Evaluation per Spec Section 10:
-    # 1. Definite Rejections: duplicate_reference, recipient_mismatch, status_unsuccessful, amount_underpaid (when partial disabled)
-    if "duplicate_reference" in failed_checks or "recipient_mismatch" in failed_checks or "status_unsuccessful" in failed_checks or ("amount_underpaid" in failed_checks and not partial_enabled):
+    if has_doctored_flag:
+        failed_checks.append("doctored_screenshot")
+        payment.rejection_reason = "Screenshot flagged for image manipulation or reuse."
+    elif any(kw in f for f in flags_lower for kw in ("unreadable", "failed")):
+        failed_checks.append("unreadable_screenshot")
+
+    if ai_result.confidence < 0.85 or ("low_confidence" in ai_result.integrity_flags):
+        if "low_confidence" not in failed_checks:
+            failed_checks.append("low_confidence")
+
+    # Decision Matrix Evaluation:
+    reject_flags = {
+        "duplicate_reference", "recipient_mismatch", "status_unsuccessful",
+        "doctored_screenshot", "invalid_reference_format", "expired_screenshot_timestamp"
+    }
+    if any(flag in failed_checks for flag in reject_flags) or ("amount_underpaid" in failed_checks and not partial_enabled):
         decision = PaymentStatus.REJECTED
         payment.status = PaymentStatus.REJECTED
         payment.transaction_reference = ref or None
@@ -113,8 +188,8 @@ def process_payment_verification(payment: Payment, ai_result: PaymentAIExtractio
         db.session.commit()
         return PaymentStatus.REJECTED
 
-    # 2. Reviews: amount_overpaid, low_confidence, missing_reference, or AI outage
-    if "amount_overpaid" in failed_checks or "low_confidence" in failed_checks or "missing_reference" in failed_checks:
+    review_flags = {"amount_overpaid", "low_confidence", "missing_reference", "unreadable_screenshot"}
+    if any(flag in failed_checks for flag in review_flags):
         decision = PaymentStatus.REVIEW_REQUIRED
         payment.status = PaymentStatus.REVIEW_REQUIRED
         payment.transaction_reference = ref or None

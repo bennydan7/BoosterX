@@ -134,3 +134,65 @@ def test_duplicate_reference_rejection(client, app):
     u_data = res_u.get_json()
     assert u_data["status"] == "Rejected"
     assert "Transaction already used" in u_data["rejection_reason"]
+
+
+def test_pdf_upload_rejection(client, app):
+    """PDF files must be rejected by magic bytes (%PDF) returning HTTP 400 Bad Request."""
+    res_s = client.post("/api/session")
+    csrf_tok = res_s.get_json()["csrf_token"]
+    headers = {"X-CSRF-Token": csrf_tok}
+
+    res_p = client.post("/api/payments", json={"amount_ghs": 100.00, "network": "Telecel"}, headers=headers)
+    p_id = res_p.get_json()["payment_id"]
+
+    pdf_bytes = io.BytesIO(b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF")
+    data = {"file": (pdf_bytes, "receipt.pdf")}
+
+    res_u = client.post(f"/api/payments/{p_id}/screenshot", data=data, content_type="multipart/form-data", headers=headers)
+    assert res_u.status_code == 400
+    u_data = res_u.get_json()
+    assert "PDF files are not accepted" in u_data["error"]
+
+    # Verify payment status remained Idle (AI not invoked)
+    with app.app_context():
+        payment = Payment.query.filter_by(payment_id=p_id).first()
+        assert payment.status == PaymentStatus.IDLE
+
+
+def test_expired_screenshot_timestamp(client, app):
+    """Screenshot timestamp outside the payment window must be rejected."""
+    res_s = client.post("/api/session")
+    csrf_tok = res_s.get_json()["csrf_token"]
+    headers = {"X-CSRF-Token": csrf_tok}
+
+    res_p = client.post("/api/payments", json={"amount_ghs": 100.00, "network": "Telecel"}, headers=headers)
+    p_id = res_p.get_json()["payment_id"]
+
+    img_bytes = create_dummy_image_bytes("PNG")
+    data = {"file": (img_bytes, "expired_timestamp.png")}
+
+    res_u = client.post(f"/api/payments/{p_id}/screenshot", data=data, content_type="multipart/form-data", headers=headers)
+    assert res_u.status_code == 200
+    u_data = res_u.get_json()
+    assert u_data["status"] == "Rejected"
+    assert "outside the valid payment window" in u_data["rejection_reason"]
+
+
+def test_doctored_screenshot_rejection(client, app):
+    """Screenshots flagged with manipulation or doctored integrity flags must be rejected."""
+    res_s = client.post("/api/session")
+    csrf_tok = res_s.get_json()["csrf_token"]
+    headers = {"X-CSRF-Token": csrf_tok}
+
+    res_p = client.post("/api/payments", json={"amount_ghs": 100.00, "network": "Telecel"}, headers=headers)
+    p_id = res_p.get_json()["payment_id"]
+
+    img_bytes = create_dummy_image_bytes("PNG")
+    data = {"file": (img_bytes, "doctored_screenshot.png")}
+
+    res_u = client.post(f"/api/payments/{p_id}/screenshot", data=data, content_type="multipart/form-data", headers=headers)
+    assert res_u.status_code == 200
+    u_data = res_u.get_json()
+    assert u_data["status"] == "Rejected"
+    assert "image manipulation or reuse" in u_data["rejection_reason"]
+

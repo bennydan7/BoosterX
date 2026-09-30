@@ -55,3 +55,9 @@ This document logs all key architectural, security, and design decisions made du
 - **Decision**: Consolidated root directory using `git mv` so the top level contains strictly `frontend/` and `backend/` folders. Project documentation lives in `backend/docs/`, scripts in `backend/scripts/`, and Figma design assets in `frontend/.figma/`. Root level retains only root orchestration configs (`README.md`, `Dockerfile`, `docker-compose.yml`, `render.yaml`, `.env.example`, `.gitignore`).
 - **Rationale**: Organizes mono-repo clearly, preserves git history, and aligns build scripts and Docker container paths.
 
+### DEC-010: Gemini OpenAI API Integration & Free-Tier Rate-Limit Handling
+- **Context**: AI payment verification relies on Google Gemini's OpenAI-compatible endpoint (`https://generativelanguage.googleapis.com/v1beta/openai/`) using `gemini-2.0-flash-lite`. Gemini free tier enforces 15 requests per minute (RPM) and 1,500 requests per day (RPD).
+- **Decision**: Set default `AI_API_URL` to `https://generativelanguage.googleapis.com/v1beta/openai/` and `AI_MODEL` to `gemini-2.0-flash-lite`. If API quota/rate limits (HTTP 429) or network errors occur, `PaymentAI.extract()` returns `integrity_flags=["AI_EXTRACTION_FAILED"]` and `confidence=0.0`. The decision engine routes failed extractions to `PaymentStatus.REVIEW_REQUIRED` for human admin review instead of rejecting payments.
+- **Rationale**: Protects customers from false payment rejections during AI rate limit exhaustion or third-party outages while keeping verification zero-cost on Gemini free tier.
+
+

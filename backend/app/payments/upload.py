@@ -31,6 +31,10 @@ def validate_and_save_screenshot(payment: Payment, file_storage) -> str:
     if len(file_bytes) > current_app.config["MAX_CONTENT_LENGTH"]:
         raise UploadError("File size exceeds 10 MB limit.")
 
+    # Reject PDF magic bytes explicitly
+    if file_bytes.startswith(b"%PDF"):
+        raise UploadError("PDF files are not accepted. Please upload a PNG, JPEG, or WEBP screenshot.")
+
     # Validate Magic Bytes
     valid_format = False
     for magic, fmt in ALLOWED_MAGIC_BYTES.items():

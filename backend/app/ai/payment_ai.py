@@ -2,6 +2,7 @@ import os
 import base64
 import json
 import logging
+from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field
 import requests
@@ -85,6 +86,7 @@ class PaymentAI:
     @staticmethod
     def _mock_extract(filename: str, image_path: str) -> PaymentAIExtraction:
         """Mock AI vision extraction for dev/tests based on test patterns."""
+        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
         if "reject" in filename:
             return PaymentAIExtraction(
                 amount=10.0,
@@ -93,7 +95,46 @@ class PaymentAI:
                 recipient_number="0000000000",
                 reference="INVALID_REF",
                 status="Failed",
-                datetime="2026-09-27 10:00",
+                datetime=now_str,
+                provider="Telecel",
+                confidence=0.95,
+                integrity_flags=[]
+            )
+        elif "expired" in filename:
+            return PaymentAIExtraction(
+                amount=100.0,
+                currency="GHS",
+                recipient_name="BOOSTX",
+                recipient_number="0202979378",
+                reference="TX100200",
+                status="Successful",
+                datetime="2020-01-01 10:00:00",
+                provider="Telecel",
+                confidence=0.95,
+                integrity_flags=[]
+            )
+        elif "doctored" in filename or "manipulated" in filename:
+            return PaymentAIExtraction(
+                amount=100.0,
+                currency="GHS",
+                recipient_name="BOOSTX",
+                recipient_number="0202979378",
+                reference="TX100300",
+                status="Successful",
+                datetime=now_str,
+                provider="Telecel",
+                confidence=0.95,
+                integrity_flags=["doctored"]
+            )
+        elif "invalid_ref" in filename:
+            return PaymentAIExtraction(
+                amount=100.0,
+                currency="GHS",
+                recipient_name="BOOSTX",
+                recipient_number="0202979378",
+                reference="BAD REF #!$",
+                status="Successful",
+                datetime=now_str,
                 provider="Telecel",
                 confidence=0.95,
                 integrity_flags=[]
@@ -106,7 +147,7 @@ class PaymentAI:
                 recipient_number="0202979378",
                 reference="TX999999",
                 status="Successful",
-                datetime="2026-09-27 10:00",
+                datetime=now_str,
                 provider="Telecel",
                 confidence=0.60,
                 integrity_flags=["low_confidence"]
@@ -119,7 +160,7 @@ class PaymentAI:
                 recipient_number="0202979378",
                 reference="TX804188",
                 status="Successful",
-                datetime="2026-09-27 11:16",
+                datetime=now_str,
                 provider="Telecel",
                 confidence=0.95,
                 integrity_flags=[]
@@ -133,7 +174,7 @@ class PaymentAI:
                 recipient_number="0202979378",
                 reference=f"TX{os.getpid()}{hash(filename) % 10000:04d}",
                 status="Successful",
-                datetime="2026-09-27 11:42",
+                datetime=now_str,
                 provider="Telecel",
                 confidence=0.98,
                 integrity_flags=[]

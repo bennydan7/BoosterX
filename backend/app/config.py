@@ -20,10 +20,10 @@ class Config:
     PROVIDER_API_URL = os.getenv("PROVIDER_API_URL", "https://boostcenter2.com/api/v2")
     PROVIDER_API_KEY = os.getenv("PROVIDER_API_KEY", "mock-provider-key")
     
-    # AI Vision Verification Settings
-    AI_API_URL = os.getenv("AI_API_URL", os.getenv("OPENAI_API_URL", "https://api.openai.com/v1"))
+    # AI Vision Verification Settings (Gemini OpenAI-compatible API)
+    AI_API_URL = os.getenv("AI_API_URL", os.getenv("OPENAI_API_URL", "https://generativelanguage.googleapis.com/v1beta/openai/"))
     AI_API_KEY = os.getenv("AI_API_KEY", os.getenv("OPENAI_API_KEY", ""))
-    AI_MODEL = os.getenv("AI_MODEL", os.getenv("OPENAI_VISION_MODEL", "gpt-4o-mini"))
+    AI_MODEL = os.getenv("AI_MODEL", os.getenv("OPENAI_VISION_MODEL", "gemini-2.0-flash-lite"))
     
     # FX Rate Settings
     FX_API_URL = os.getenv("FX_API_URL", "")
