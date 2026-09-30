@@ -1,4 +1,5 @@
 import os
+import sys
 import secrets
 from functools import wraps
 from flask import request, jsonify, session, current_app
@@ -14,7 +15,7 @@ from backend.app.models.user import UserRole
 limiter = Limiter(
     key_func=get_remote_address,
     default_limits=[],
-    storage_uri=os.getenv("REDIS_URL", "redis://localhost:6379/0"),
+    storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://") if ("pytest" in sys.modules or os.getenv("TESTING") == "true" or "REDIS_URL" not in os.environ) else os.getenv("REDIS_URL", "redis://localhost:6379/0"),
 )
 
 

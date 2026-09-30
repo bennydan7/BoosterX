@@ -14,6 +14,8 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
     REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+    RATELIMIT_STORAGE_URI = "memory://" if (TESTING or "pytest" in sys.modules or "REDIS_URL" not in os.environ) else os.getenv("REDIS_URL")
+    RATELIMIT_ENABLED = not TESTING
     
     # Provider Settings
     PROVIDER_MODE = os.getenv("PROVIDER_MODE", "fake")  # 'live' or 'fake'
