@@ -17,10 +17,10 @@ def _validate_reference_format(ref: str, network: str = None) -> bool:
         return False
     net_lower = (network or "").lower()
     if "telecel" in net_lower:
-        if not re.match(r'^(TX|tx)?[A-Za-z0-9]{6,24}$', ref):
+        if not re.match(r'^(TX|tx)?[A-Za-z0-9\-_]{4,24}$', ref):
             return False
     elif "mtn" in net_lower or "airtel" in net_lower or "tigo" in net_lower:
-        if not re.match(r'^[A-Za-z0-9]{6,24}$', ref):
+        if not re.match(r'^[A-Za-z0-9\-_]{6,24}$', ref):
             return False
     return True
 
