@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(na
 logger = logging.getLogger("boostx.scheduler")
 
 def run_scheduler():
-    app = create_app()
+    app = create_app(serves_web=False)
     logger.info("Initializing BoostX Worker Scheduler...")
     
     redis_url = app.config.get("REDIS_URL", "redis://localhost:6379/0")

@@ -8,7 +8,7 @@ from backend.app.cli import register_cli_commands
 
 migrate = Migrate()
 
-def create_app(config_class=Config):
+def create_app(config_class=Config, serves_web=True):
     repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     dist_path = os.path.join(repo_root, "frontend", "dist")
     if not os.path.exists(dist_path):
@@ -21,10 +21,14 @@ def create_app(config_class=Config):
     )
     app.config.from_object(config_class)
 
-    # Sessions are signed with SECRET_KEY: refuse to run outside tests with the
-    # well-known development default.
-    if not app.config.get("TESTING") and app.config.get("SECRET_KEY") == INSECURE_DEFAULT_SECRET_KEY:
-        raise RuntimeError("SECRET_KEY must be set to a private random value in non-testing environments.")
+    # Login sessions are signed with SECRET_KEY, so any process that serves web
+    # traffic refuses to start with the well-known development default. Background
+    # workers (serves_web=False) never sign or read sessions and don't need it.
+    if serves_web and not app.config.get("TESTING") and app.config.get("SECRET_KEY") == INSECURE_DEFAULT_SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY is not set. Set the SECRET_KEY environment variable to a private random value "
+            "(e.g. `python -c \"import secrets; print(secrets.token_hex(32))\"`)."
+        )
 
     # In production / non-testing environments, enforce Postgres requirement for row locking
     if not app.config.get("TESTING"):

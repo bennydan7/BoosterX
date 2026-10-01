@@ -401,6 +401,19 @@ def test_refuses_to_start_with_default_secret_key_outside_testing():
         create_app(ProdConfig)
 
 
+def test_background_workers_do_not_need_a_secret_key():
+    class WorkerConfig(Config):
+        TESTING = False
+        SECRET_KEY = INSECURE_DEFAULT_SECRET_KEY
+        SQLALCHEMY_DATABASE_URI = "postgresql://unused:unused@127.0.0.1:1/unused"
+
+    # Past the SECRET_KEY check (it only fails later, connecting to the fake database URL).
+    try:
+        create_app(WorkerConfig, serves_web=False)
+    except RuntimeError as exc:
+        assert "SECRET_KEY" not in str(exc)
+
+
 def test_cors_is_disabled_by_default(client):
     res = client.get("/api/auth/me", headers={"Origin": "https://evil.example"})
     assert "Access-Control-Allow-Origin" not in res.headers
