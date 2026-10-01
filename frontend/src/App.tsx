@@ -385,7 +385,7 @@ function Settings({ dark, setDark }: { dark: boolean; setDark: (v: boolean) => v
   return <><PageTitle title="Settings" description="Control your account preferences and security." /><Card><span className="eyebrow">Appearance</span><h2>Choose your theme</h2><div className="theme-cards"><button className={!dark ? "selected" : ""} onClick={() => setDark(false)}><span><Icon name="sun"/>Light mode</span></button><button className={dark ? "selected" : ""} onClick={() => setDark(true)}><span><Icon name="moon"/>Dark mode</span></button></div></Card></>;
 }
 
-function Auth({ mode, go }: { mode: "login" | "register"; go: (page: string) => void }) {
+function Auth({ mode, go, onAuthed }: { mode: "login" | "register"; go: (page: string) => void; onAuthed: (user: UserInfo) => void }) {
   const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
@@ -397,12 +397,14 @@ function Auth({ mode, go }: { mode: "login" | "register"; go: (page: string) => 
     setError("");
     setLoading(true);
     try {
-      if (mode === "login") {
-        await api.login(identifier, password);
-      } else {
-        await api.register({ email: identifier, password, full_name: fullName });
-      }
-      go("dashboard");
+      const res = mode === "login"
+        ? await api.login(identifier, password)
+        : await api.register({ email: identifier, password, full_name: fullName });
+      // Load the freshly authenticated user before navigating, otherwise the
+      // app keeps rendering the stale guest state from the initial /auth/me.
+      const me = await api.getMe();
+      onAuthed(me);
+      go(me.role === "admin" || res.redirect_path === "/admin" ? "admin" : "dashboard");
     } catch (err: any) {
       setError(err.message || "Authentication failed.");
     } finally {
@@ -432,10 +434,11 @@ const adminNavGroups = [
   { label: "Storefront", links: [["dashboard", "Main Storefront", "home"]] },
 ] as const;
 
-function Shell({ page, go, children, dark, setDark, user }: { page: string; go: (page: string) => void; children: ReactNode; dark: boolean; setDark: (v: boolean) => void; user: UserInfo | null }) {
+function Shell({ page, go, children, dark, setDark, user, onLoggedOut }: { page: string; go: (page: string) => void; children: ReactNode; dark: boolean; setDark: (v: boolean) => void; user: UserInfo | null; onLoggedOut: () => void }) {
   const [open, setOpen] = useState(false);
   const handleLogout = async () => {
     await api.logout().catch(() => {});
+    onLoggedOut();
     go("login");
   };
 
@@ -507,7 +510,7 @@ export default function App() {
     }
   }, [page, dark, user]);
 
-  if (page === "login" || page === "register") return <Auth mode={page} go={go}/>;
+  if (page === "login" || page === "register") return <Auth mode={page} go={go} onAuthed={setUser}/>;
 
   let content: ReactNode = screen;
 
@@ -527,5 +530,5 @@ export default function App() {
     );
   }
 
-  return <Shell page={page} go={go} dark={dark} setDark={setDark} user={user}>{content}</Shell>;
+  return <Shell page={page} go={go} dark={dark} setDark={setDark} user={user} onLoggedOut={() => { setUser(null); api.initSession().then(() => api.getMe().then(setUser)).catch(() => {}); }}>{content}</Shell>;
 }
