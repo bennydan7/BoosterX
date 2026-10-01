@@ -4,8 +4,11 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    dockerCommand: "gunicorn --bind 0.0.0.0:$PORT --workers 4 backend.app:create_app()"
-    preDeployCommand: "flask db upgrade"
+    # preDeployCommand is a paid-plan-only feature — Render silently never
+    # runs it on a free-tier web service, which is why the database never
+    # got its tables. Running the (idempotent) migration here instead means
+    # it runs on every boot; safe on free or paid plans either way.
+    dockerCommand: "flask db upgrade && gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 120 'backend.app:create_app()'"
     envVars:
       - key: FLASK_ENV
         value: production
@@ -28,8 +31,15 @@ services:
         sync: false
       - key: AI_API_KEY
         sync: false
+      # Switched from OpenAI to Gemini: Flash-Lite is free (rate limited —
+      # check your current quota in Google AI Studio), and the "-latest"
+      # alias is a rolling pointer Google maintains, so this never hardcodes
+      # a dated model id that gets deprecated out from under us. AI_API_KEY
+      # above must hold a Google AI Studio key, not an OpenAI key.
+      - key: AI_API_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
       - key: AI_MODEL
-        value: gpt-4o-mini
+        value: gemini-flash-lite-latest
 
   - type: worker
     name: boostx-worker
@@ -55,8 +65,15 @@ services:
         sync: false
       - key: AI_API_KEY
         sync: false
+      # Switched from OpenAI to Gemini: Flash-Lite is free (rate limited —
+      # check your current quota in Google AI Studio), and the "-latest"
+      # alias is a rolling pointer Google maintains, so this never hardcodes
+      # a dated model id that gets deprecated out from under us. AI_API_KEY
+      # above must hold a Google AI Studio key, not an OpenAI key.
+      - key: AI_API_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
       - key: AI_MODEL
-        value: gpt-4o-mini
+        value: gemini-flash-lite-latest
 
   - type: redis
     name: boostx-redis
