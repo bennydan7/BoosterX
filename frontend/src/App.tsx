@@ -180,7 +180,7 @@ function NewOrder({ go }: { go: (page: string) => void }) {
   return <><PageTitle title="Create New Order" description="Launch a new campaign in a few simple steps." />
     <div className="form-layout">
       <Card><div className="form-section"><div className="number">01</div><div><h2>Select a platform</h2><p>Choose where you want to grow your audience.</p></div></div>
-        <div className="platform-grid">{["Instagram", "TikTok", "Facebook", "X", "Telegram"].map((p) => <button className={platform === p ? "selected" : ""} onClick={() => setPlatform(p)} key={p}><SocialIcon platform={p}/>{p}{platform === p && <Icon name="check" opacity={1} />}</button>)}</div>
+        <div className="platform-grid">{["Instagram", "TikTok", "Facebook", "X", "Telegram"].map((p) => <button className={platform === p ? "selected" : ""} onClick={() => setPlatform(p)} key={p}><SocialIcon platform={p}/>{p}{platform === p && <Icon name="check" />}</button>)}</div>
         <hr/>
         <div className="form-section"><div className="number">02</div><div><h2>Order details</h2><p>Tell us exactly what you need.</p></div></div>
         <div className="fields-grid">
