@@ -50,14 +50,22 @@ def _parse_screenshot_datetime(dt_str: str):
         return None
 
 
+def _to_naive_utc(dt):
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
+
 def process_payment_verification(payment: Payment, ai_result: PaymentAIExtraction, admin_override_action: str = None) -> str:
     """
     Evaluates AI extraction results against backend rules and payment expectations.
     Runs verification and ledger crediting in ONE transaction with owner lock.
     Returns decision: 'Verified', 'Rejected', 'Review Required', or 'Expired'.
     """
-    now_utc = datetime.utcnow()
-    payment_expires = payment.expires_at.replace(tzinfo=None) if payment.expires_at and payment.expires_at.tzinfo is not None else payment.expires_at
+    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
+    payment_expires = _to_naive_utc(payment.expires_at)
 
     # 1. Check expiration
     if payment_expires and now_utc > payment_expires and payment.status not in (PaymentStatus.VERIFIED, PaymentStatus.REJECTED):
@@ -133,7 +141,7 @@ def process_payment_verification(payment: Payment, ai_result: PaymentAIExtractio
     if ai_result.datetime:
         parsed_dt = _parse_screenshot_datetime(ai_result.datetime)
         if parsed_dt:
-            payment_created = payment.created_at.replace(tzinfo=None) if payment.created_at and payment.created_at.tzinfo is not None else (payment.created_at or now_utc)
+            payment_created = _to_naive_utc(payment.created_at) or now_utc
             payment_expires_dt = payment_expires or (payment_created + timedelta(minutes=30))
             
             min_allowed = payment_created - timedelta(minutes=15)

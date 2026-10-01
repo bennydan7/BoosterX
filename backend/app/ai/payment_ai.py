@@ -2,7 +2,7 @@ import os
 import base64
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel, Field
 import requests
@@ -86,7 +86,7 @@ class PaymentAI:
     @staticmethod
     def _mock_extract(filename: str, image_path: str) -> PaymentAIExtraction:
         """Mock AI vision extraction for dev/tests based on test patterns."""
-        now_str = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+        now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         if "reject" in filename:
             return PaymentAIExtraction(
                 amount=10.0,

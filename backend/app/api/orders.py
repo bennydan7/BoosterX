@@ -73,7 +73,7 @@ def _serialize_order(order: Order, include_events: bool = False) -> dict:
 def create_order_endpoint():
     data = request.get_json(silent=True) or {}
     service_id = data.get("service_id")
-    target = data.get("target")
+    target = data.get("target") or data.get("link") or data.get("target_url")
     quantity = data.get("quantity")
     idempotency_key = request.headers.get("Idempotency-Key") or data.get("idempotency_key")
 

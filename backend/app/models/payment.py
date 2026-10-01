@@ -2,6 +2,7 @@ from datetime import datetime, timezone, timedelta
 import json
 import uuid
 from backend.app.db import db
+from backend.app.utils.datetime import utc_now
 
 class PaymentStatus:
     IDLE = "Idle"
@@ -26,8 +27,8 @@ class Payment(db.Model):
     transaction_reference = db.Column(db.String(100), nullable=True, index=True)
     attempt_count = db.Column(db.Integer, nullable=False, default=0)
     rejection_reason = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    expires_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc) + timedelta(minutes=30))
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
+    expires_at = db.Column(db.DateTime, nullable=False, default=lambda: utc_now() + timedelta(minutes=30))
     verified_at = db.Column(db.DateTime, nullable=True)
 
     @staticmethod
@@ -45,7 +46,7 @@ class PaymentVerification(db.Model):
     checks_failed_str = db.Column(db.Text, nullable=True)
     confidence = db.Column(db.Numeric(5, 2), nullable=True)
     decision = db.Column(db.String(30), nullable=False)
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    created_at = db.Column(db.DateTime, nullable=False, default=utc_now)
 
     @property
     def raw_ai_json(self) -> dict:
