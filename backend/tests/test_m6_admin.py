@@ -19,7 +19,7 @@ def app():
         db.create_all()
         runner = app.test_cli_runner()
         runner.invoke(args=["seed"])
-        runner.invoke(args=["create-admin", "--username", "admin_test", "--phone", "+233240009999", "--password", "AdminPassword123!"])
+        runner.invoke(args=["create-admin", "--email", "admin_test@boostx.com", "--password", "AdminPassword123!"])
         yield app
         db.session.remove()
         db.drop_all()
@@ -41,7 +41,8 @@ def test_admin_404_security_guard_for_unauthenticated(client):
 def test_admin_404_security_guard_for_customer(client):
     # Register customer
     res_reg = client.post("/api/auth/register", json={
-        "username": "customer1",
+        "identifier": "customer1@boostx.com",
+        "full_name": "Customer One",
         "phone": "+233241112222",
         "password": "Password123!"
     })

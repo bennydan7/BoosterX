@@ -45,13 +45,18 @@ def register():
     full_name = data.get("full_name")
     identifier = data.get("identifier") or data.get("email") or data.get("phone", "")
     password = data.get("password", "")
+    if not identifier:
+        return jsonify({"error": "Email or phone number is required."}), 400
 
     email = None
     phone = None
     if "@" in identifier:
         email = identifier.strip().lower()
     else:
-        phone = normalize_phone(identifier)
+        try:
+            phone = normalize_phone(identifier)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
     try:
         user = auth_service.register_customer(

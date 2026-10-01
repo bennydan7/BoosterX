@@ -415,8 +415,10 @@ def list_users_admin():
     if search_q:
         q_like = f"%{search_q.strip()}%"
         query = query.filter(
-            (User.username.ilike(q_like)) |
-            (User.phone.ilike(q_like))
+            (User.full_name.ilike(q_like)) |
+            (User.email.ilike(q_like)) |
+            (User.phone.ilike(q_like)) |
+            (User.public_user_id.ilike(q_like))
         )
 
     try:
@@ -434,7 +436,10 @@ def list_users_admin():
         bal = get_owner_balance(u.id, None)
         items.append({
             "id": u.id,
-            "username": u.username,
+            "public_user_id": u.public_user_id,
+            "full_name": u.full_name,
+            "email": u.email,
+            "username": u.full_name or u.email or u.public_user_id,
             "phone": u.phone,
             "role": u.role,
             "status": u.status,
@@ -466,7 +471,8 @@ def update_user_admin(user_id: int):
 
     _log_admin_action("UPDATE_USER", "user", user.id, old_val=f"status={old_status}", new_val=f"status={user.status}")
     db.session.commit()
-    return jsonify({"message": f"User {user.username} status updated to {user.status}"}), 200
+    user_display = user.full_name or user.email or user.public_user_id
+    return jsonify({"message": f"User {user_display} status updated to {user.status}"}), 200
 
 
 @admin_bp.get("/transactions")
@@ -623,26 +629,33 @@ def list_audit_logs():
 @admin_bp.post("/admins")
 def create_admin_account():
     data = request.get_json(silent=True) or {}
-    username = data.get("username")
+    identifier = data.get("email") or data.get("username")
+    full_name = data.get("full_name") or data.get("name") or data.get("username") or "Administrator"
     phone = data.get("phone")
     password = data.get("password")
 
-    if not username or not phone or not password:
-        return jsonify({"error": "username, phone, and password are required"}), 400
+    if not identifier or not password:
+        return jsonify({"error": "email/username and password are required"}), 400
 
-    try:
-        norm_phone = normalize_phone(phone)
-    except ValueError as exc:
-        return jsonify({"error": str(exc)}), 400
+    norm_phone = None
+    if phone:
+        try:
+            norm_phone = normalize_phone(phone)
+        except ValueError as exc:
+            return jsonify({"error": str(exc)}), 400
 
-    if User.query.filter_by(username=username).first():
-        return jsonify({"error": "Username is already taken"}), 400
+    email = identifier.strip().lower() if "@" in identifier else f"{identifier.strip()}@boostx.gh"
 
-    if User.query.filter_by(phone=norm_phone).first():
+    if User.query.filter_by(email=email).first():
+        return jsonify({"error": "Admin account with this email/username already exists"}), 400
+
+    if norm_phone and User.query.filter_by(phone=norm_phone).first():
         return jsonify({"error": "Phone number is already registered"}), 400
 
     admin_user = User(
-        username=username.strip(),
+        public_user_id=User.new_public_id(UserRole.ADMIN),
+        full_name=full_name.strip(),
+        email=email,
         phone=norm_phone,
         role=UserRole.ADMIN,
         status=UserStatus.ACTIVE
@@ -651,7 +664,7 @@ def create_admin_account():
     db.session.add(admin_user)
     db.session.flush()
 
-    _log_admin_action("CREATE_ADMIN", "user", admin_user.id, new_val=admin_user.username)
+    _log_admin_action("CREATE_ADMIN", "user", admin_user.id, new_val=admin_user.email)
     db.session.commit()
 
-    return jsonify({"message": f"Admin account '{username}' created successfully"}), 201
+    return jsonify({"message": f"Admin account '{email}' created successfully", "public_user_id": admin_user.public_user_id}), 201

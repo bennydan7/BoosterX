@@ -40,6 +40,12 @@ def create_app(config_class=Config):
     # Ensure upload directory exists
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
+    with app.app_context():
+        try:
+            db.create_all()
+        except Exception as exc:
+            app.logger.warning(f"db.create_all() auto-initialization note: {exc}")
+
     # Register CLI commands
     register_cli_commands(app)
 

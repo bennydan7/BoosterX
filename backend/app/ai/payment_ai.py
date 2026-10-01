@@ -70,7 +70,7 @@ class PaymentAI:
                 "response_format": {"type": "json_object"}
             }
 
-            resp = requests.post(f"{api_url}/chat/completions", headers=headers, json=payload, timeout=20.0)
+            resp = requests.post(f"{api_url.rstrip('/')}/chat/completions", headers=headers, json=payload, timeout=20.0)
             resp.raise_for_status()
             data = resp.json()
             content = data["choices"][0]["message"]["content"]
