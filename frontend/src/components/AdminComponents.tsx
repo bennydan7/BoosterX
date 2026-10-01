@@ -248,7 +248,7 @@ export function AdminServices() {
   const [services, setServices] = useState<any[]>([]);
 
   useEffect(() => {
-    api.getAdminServices().then(res => setServices(res.services)).catch(() => {});
+    api.getAdminServices().then(res => setServices(res.services)).catch(err => alert(err.message || "Failed to load admin services."));
   }, []);
 
   const toggleService = async (id: number, currentEnabled: boolean) => {

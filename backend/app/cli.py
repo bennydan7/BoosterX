@@ -117,12 +117,16 @@ def register_cli_commands(app):
         db.session.commit()
         click.echo("Settings seeded.")
         
-        # 3. Seed initial mock services if empty
-        if Service.query.count() == 0:
+        # 3. Seed initial default services if no enabled services exist
+        if Service.query.filter_by(enabled=True).count() == 0:
             for s_data in DEFAULT_MOCK_SERVICES:
-                db.session.add(Service(**s_data))
+                existing = Service.query.filter_by(provider_service_id=s_data["provider_service_id"]).first()
+                if not existing:
+                    db.session.add(Service(**s_data))
+                else:
+                    existing.enabled = True
             db.session.commit()
-            click.echo("Default services seeded.")
+            click.echo("Default enabled services seeded.")
 
         # 4. Seed initial admin if specified in ENV or missing
         admin_email = os.getenv("ADMIN_EMAIL", "admin@boostx.com")

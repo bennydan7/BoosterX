@@ -128,13 +128,28 @@ function NewOrder({ go }: { go: (page: string) => void }) {
   const [quantity, setQuantity] = useState("1000");
   const [placedOrder, setPlacedOrder] = useState<OrderDetail | null>(null);
   const [error, setError] = useState("");
+  const [serviceError, setServiceError] = useState("");
+  const [loadingServices, setLoadingServices] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    setLoadingServices(true);
+    setServiceError("");
     api.getServices(platform).then(res => {
       setServices(res.services);
-      if (res.services.length > 0) setSelectedServiceId(res.services[0].id);
-    }).catch(() => {});
+      if (res.services.length > 0) {
+        setSelectedServiceId(res.services[0].id);
+      } else {
+        setSelectedServiceId(0);
+        setServiceError(`No active services currently available for ${platform}. Please select another platform or check back soon.`);
+      }
+    }).catch((err: any) => {
+      setServices([]);
+      setSelectedServiceId(0);
+      setServiceError(err.message || `Failed to load services for ${platform}.`);
+    }).finally(() => {
+      setLoadingServices(false);
+    });
   }, [platform]);
 
   const activeService = services.find(s => s.id === selectedServiceId) || services[0];
@@ -170,11 +185,18 @@ function NewOrder({ go }: { go: (page: string) => void }) {
         <div className="form-section"><div className="number">02</div><div><h2>Order details</h2><p>Tell us exactly what you need.</p></div></div>
         <div className="fields-grid">
           <SelectField label="Service" value={selectedServiceId.toString()} onChange={(v) => setSelectedServiceId(Number(v))}>
-            {services.map(s => <option key={s.id} value={s.id}>{s.name} - GHS {s.price_per_1000_ghs}/1,000</option>)}
+            {loadingServices ? (
+              <option value="0">Loading services for {platform}...</option>
+            ) : services.length === 0 ? (
+              <option value="0">No active services available for {platform}</option>
+            ) : (
+              services.map(s => <option key={s.id} value={s.id}>{s.name} - GHS {s.price_per_1000_ghs}/1,000</option>)
+            )}
           </SelectField>
           <Field label="Target URL or username" placeholder="https://instagram.com/yourprofile" value={target} onChange={setTarget} />
         </div>
-        <div className="fields-grid">
+        {serviceError && <div className="payment-warning" style={{ marginTop: "0.5rem" }}><strong>{serviceError}</strong></div>}
+        <div className="fields-grid" style={{ marginTop: "1rem" }}>
           <Field label="Quantity" value={quantity} type="number" onChange={setQuantity}/>
           <div className="info-box"><span>Service limits</span><strong>Min {activeService?.min_quantity || 100} · Max {(activeService?.max_quantity || 100000).toLocaleString()}</strong><small>Estimated delivery: 10–30 minutes</small></div>
         </div>
@@ -241,14 +263,33 @@ function OrderDetails({ go }: { go: (page: string) => void }) {
 
 function Services({ go }: { go: (page: string) => void }) {
   const [services, setServices] = useState<ServiceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    api.getServices().then(res => setServices(res.services)).catch(() => {});
+    setLoading(true);
+    setError("");
+    api.getServices().then(res => {
+      setServices(res.services);
+      if (res.services.length === 0) {
+        setError("No services are currently available in the catalog.");
+      }
+    }).catch(err => {
+      setError(err.message || "Failed to load services catalog.");
+    }).finally(() => {
+      setLoading(false);
+    });
   }, []);
 
   return <><PageTitle title="Services" description="Explore our complete catalog of social growth services." />
     <Card>
-      <div className="table-wrap"><table><thead><tr><th>Platform</th><th>Service</th><th>Description</th><th>Min / Max</th><th>Price / 1,000</th><th>Speed</th><th></th></tr></thead><tbody>{services.map((s) => <tr key={s.id}><td><span className="platform-cell"><SocialIcon platform={s.platform}/>{s.platform}</span></td><td><strong>{s.name}</strong></td><td>{s.description}</td><td>{s.min_quantity.toLocaleString()} / {s.max_quantity.toLocaleString()}</td><td><strong>GHS {s.price_per_1000_ghs}</strong></td><td><Status>{s.speed || "Fast"}</Status></td><td><Button variant="secondary" onClick={() => go("new-order")}>Order now</Button></td></tr>)}</tbody></table></div>
+      {loading ? (
+        <div style={{ padding: "32px", textAlign: "center" }}>Loading service catalog...</div>
+      ) : error && services.length === 0 ? (
+        <div style={{ padding: "32px", textAlign: "center", color: "#f87171" }}>{error}</div>
+      ) : (
+        <div className="table-wrap"><table><thead><tr><th>Platform</th><th>Service</th><th>Description</th><th>Min / Max</th><th>Price / 1,000</th><th>Speed</th><th></th></tr></thead><tbody>{services.map((s) => <tr key={s.id}><td><span className="platform-cell"><SocialIcon platform={s.platform}/>{s.platform}</span></td><td><strong>{s.name}</strong></td><td>{s.description}</td><td>{s.min_quantity.toLocaleString()} / {s.max_quantity.toLocaleString()}</td><td><strong>GHS {s.price_per_1000_ghs}</strong></td><td><Status>{s.speed || "Fast"}</Status></td><td><Button variant="secondary" onClick={() => go("new-order")}>Order now</Button></td></tr>)}</tbody></table></div>
+      )}
     </Card>
   </>;
 }
