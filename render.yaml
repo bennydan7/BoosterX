@@ -26,7 +26,7 @@ services:
       - key: PROVIDER_MODE
         value: live
       - key: PROVIDER_API_URL
-        value: https://boostcenter2.com/api/v2
+        value: https://baloonboost.com/api/v2
       - key: PROVIDER_API_KEY
         sync: false
       - key: AI_API_KEY
@@ -60,7 +60,7 @@ services:
       - key: PROVIDER_MODE
         value: live
       - key: PROVIDER_API_URL
-        value: https://boostcenter2.com/api/v2
+        value: https://baloonboost.com/api/v2
       - key: PROVIDER_API_KEY
         sync: false
       - key: AI_API_KEY

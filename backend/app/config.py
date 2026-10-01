@@ -19,7 +19,7 @@ class Config:
     
     # Provider Settings
     PROVIDER_MODE = os.getenv("PROVIDER_MODE", "fake")  # 'live' or 'fake'
-    PROVIDER_API_URL = os.getenv("PROVIDER_API_URL", "https://boostcenter2.com/api/v2")
+    PROVIDER_API_URL = os.getenv("PROVIDER_API_URL", "https://baloonboost.com/api/v2")
     PROVIDER_API_KEY = os.getenv("PROVIDER_API_KEY", "mock-provider-key")
     
     # AI Vision Verification Settings (Gemini OpenAI-compatible API)

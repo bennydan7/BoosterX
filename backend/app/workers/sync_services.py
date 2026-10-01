@@ -4,24 +4,10 @@ from typing import Optional
 from backend.app.db import db
 from backend.app.models import Service, Platform
 from backend.app.providers.factory import get_provider_client
+from backend.app.providers.platform_mapper import classify_platform, log_platform_mapping_diagnostics
 
 logger = logging.getLogger("boostx.sync_services")
 
-KEYWORD_MAP = {
-    "TikTok": ["tiktok"],
-    "Instagram": ["instagram", "ig follower", "ig like", "ig view"],
-    "Facebook": ["facebook", "fb follower", "fb page", "fb like"],
-    "X": ["twitter", "x post", "x follower", "x like", "x ("],
-    "Telegram": ["telegram", "tg member", "tg channel"]
-}
-
-def classify_platform(category: str, name: str) -> Optional[str]:
-    combined = f"{category} {name}".lower()
-    for platform_name, keywords in KEYWORD_MAP.items():
-        for kw in keywords:
-            if kw in combined:
-                return platform_name
-    return None
 
 def sync_services_worker(app=None) -> dict:
     """
@@ -34,6 +20,7 @@ def sync_services_worker(app=None) -> dict:
     else:
         return _do_sync()
 
+
 def _do_sync() -> dict:
     logger.info("Starting service catalog sync worker...")
     provider = get_provider_client()
@@ -43,18 +30,21 @@ def _do_sync() -> dict:
         logger.error(f"Failed to fetch services from provider: {exc}")
         return {"status": "error", "message": str(exc)}
 
+    # Log safe diagnostic summary of raw services returned from BaloonBoost
+    diag_counts = log_platform_mapping_diagnostics(raw_services)
+
     active_platforms = set(p.name for p in Platform.query.filter_by(active=True).all())
-    
+    if not active_platforms:
+        # Default active platforms if not yet set
+        active_platforms = {"TikTok", "Instagram", "Facebook", "X", "Telegram"}
+
     synced_count = 0
     updated_count = 0
     fetched_provider_ids = set()
 
     for item in raw_services:
-        # Ignore non-Default types
-        if item.type and item.type != "Default":
-            continue
-
-        platform = classify_platform(item.category, item.name)
+        # Do NOT filter by type="Default" because BaloonBoost uses subscribe, followers, likes, etc.
+        platform = classify_platform(name=item.name, category=item.category, type_=item.type)
         if not platform or platform not in active_platforms:
             continue
 
@@ -92,7 +82,7 @@ def _do_sync() -> dict:
     vanished_count = 0
     existing_services = Service.query.all()
     for s in existing_services:
-        if s.provider_service_id not in fetched_provider_ids:
+        if s.provider_service_id and s.provider_service_id not in fetched_provider_ids:
             if s.enabled:
                 s.enabled = False
                 vanished_count += 1
@@ -103,5 +93,6 @@ def _do_sync() -> dict:
         "status": "success",
         "added": synced_count,
         "updated": updated_count,
-        "deactivated": vanished_count
+        "deactivated": vanished_count,
+        "diagnostics": diag_counts
     }

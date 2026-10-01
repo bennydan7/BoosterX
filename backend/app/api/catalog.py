@@ -27,12 +27,18 @@ def get_platforms():
     }), 200
 
 
+from backend.app.providers.platform_mapper import normalize_platform_name
+
 @catalog_bp.get("/services")
 def get_services():
     platform_name = request.args.get("platform")
     query = Service.query.filter_by(enabled=True)
     if platform_name:
-        query = query.filter_by(platform=platform_name)
+        canonical = normalize_platform_name(platform_name)
+        if canonical:
+            query = query.filter_by(platform=canonical)
+        else:
+            query = query.filter(Service.platform.ilike(f"%{platform_name.strip()}%"))
 
     services = query.all()
     pricing = get_pricing_service()
