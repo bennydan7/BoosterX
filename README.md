@@ -1,5 +1,4 @@
-# BoostX — Ghana Social Media Panel (GHS Only)
-
+# BoostX —  Social Media Panel 
 BoostX is a guest-checkout social media boosting panel built specifically for Ghana, supporting local Mobile Money payments in Ghana Cedi (GHS) only.
 
 ---
